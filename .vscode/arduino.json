@@ -1,0 +1,8 @@
+{
+    "sketch": "cw.ino",
+    "port": "COM3",
+    "board": "arduino:avr:uno",
+    "programmer": "arduino:avrispmkii",
+    "output": "./build",
+    "intelliSenseGen": "global"
+}
