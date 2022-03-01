@@ -60,29 +60,16 @@ void displayMostRecentValue(int row) { // O(1)
   lcd.print(tailVal);
 }
 
-void _addSixtyOnce() {
-  static bool done = false;
-
-  if (!done) {
-    for (byte i = 0; i < 60; i++)
-      addRecentValue(random(0, 256));
-    done = true;
-  }
-}
-
-void displayAverage(int row) {  // O(n)
+void displayAverage(int row) {
   lcd.setCursor(RECENT_POSITION, row);
   lcd.print(',');
   //? TODO: rightjustify?
   String avrgS = String(calculateAverage());
   rightPad(avrgS, 3);
   lcd.print(avrgS);
-
-  if (DEBUG) _addSixtyOnce();
-  if (DEBUG) _printAll(Serial);
 }
 
-int calculateAverage() {
+int calculateAverage() { // O(n)
   if (head == nullptr)
     return -1;
 
@@ -97,6 +84,18 @@ int calculateAverage() {
   return sum / _len;
 }
 
+// debug - to check if head gets deleted
+void _addSixtyOnce() {
+  static bool done = false;
+
+  if (!done) {
+    for (byte i = 0; i < 60; i++)
+      addRecentValue(random(0, 256));
+    done = true;
+  }
+}
+
+// debug
 void _printAll(Print &p) {
   p.print(F("DEBUG: r_len="));
   p.print(_len);

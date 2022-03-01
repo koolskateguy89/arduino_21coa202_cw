@@ -1,6 +1,5 @@
 // TODO: put all in 1 file
-// NAMES and SCROLL together here
-// gonna try and implment names & scroll together here
+// NAMES and SCROLL together
 
 #define SCROLL_CHARS 2
 #define SCROLL_TIMEOUT 1000
