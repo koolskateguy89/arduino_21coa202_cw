@@ -10,37 +10,6 @@ void displayChannelName(int row, Channel *ch);
 
 // letting avrg take up all 3 chars
 // NAMES,SCROLL
-void displayChannelNameStateless(int row, Channel& ch) {
-  const int dLen = ch.description.length();
-  const byte si = ch.scrollIndex;
-
-  // could make this use a FSM?
-  /*
-  states: (store in Channel)
-  SCROLL_START, (scrollIndex = 0)
-  SCROLL_MID, (use scrollIndex)
-  SCROLL_END, (reset scrollIndex = 0)
-   */
-
-  String textToDisplay = ch.description.substring(si, si + DESC_DISPLAY_LEN);
-  rightPad(textToDisplay, DESC_DISPLAY_LEN);
-
-  lcd.setCursor(DESC_POSITION, row);
-  lcd.print(textToDisplay);
-
-  // SCROLL
-  // only scroll if description is too long
-  if (dLen > DESC_DISPLAY_LEN && millis() - ch.lastScrollTime >= SCROLL_TIMEOUT) {
-    ch.scrollIndex += SCROLL_CHARS;
-    // if full name has been displayed, return to start
-    // add 1 to make even lengths work (because of 'trailing' char)
-    if (ch.scrollIndex + DESC_DISPLAY_LEN > dLen + 1)
-      ch.scrollIndex = 0;
-
-    ch.lastScrollTime = millis();
-  }
-}
-
 void displayChannelName(int row, Channel *ch) {
   const uint dLen = ch->description.length();
   const byte si = ch->scrollIndex;
