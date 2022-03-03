@@ -8,11 +8,17 @@
 void addRecentValue(byte val);
 void displayAverage(int row, bool showComma); // top row
 void displayMostRecentValue(int row, bool showComma); // bottom row
+uint calculateAverage();
 
 // was difficult to think of how to impl RECENT!
 // basic singly-linked-list with only tail addition (polling? is that the term)
 // but with a max size, which once reached, head value is discarded
 typedef struct node_s {
+  node_s(byte val) {
+    this->val = val;
+    this->next = nullptr;
+  }
+
   byte val;
   struct node_s *next;
 } RecentNode;
@@ -20,67 +26,64 @@ typedef struct node_s {
 RecentNode *recentHead = nullptr;
 RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
 
-byte _recentLen = 0;
-
-struct node_s *_newNode(byte val) {
-  RecentNode *node = (RecentNode*) malloc(sizeof(*node));
-  node->val = val;
-  node->next = nullptr;
-  return node;
-}
+size_t _recentLen = 0;
 
 void addRecentValue(byte val) {  // O(1)
   if (recentHead == nullptr) {
-    recentHead = _newNode(val);
-    recentTail = recentHead;
+    recentHead = recentTail = new RecentNode(val);
     _recentLen = 1;
     return;
   }
 
-  // because we only care about the most recent MAX_SIZE values, we can discard (free)
+  // because we only care about the most recent MAX_SIZE values, we can discard (delete)
   // the oldest value, like an LRU cache
   if (_recentLen == MAX_SIZE) {
     RecentNode *oldHead = recentHead;
     recentHead = recentHead->next;
-    free(oldHead);
+    delete oldHead;
     _recentLen--;
   }
 
-  RecentNode *node = _newNode(val);
+  RecentNode *node = new RecentNode(val);
   recentTail->next = node;
   recentTail = node;
   _recentLen++;
 }
 
 void displayMostRecentValue(int row, bool showComma) { // O(1)
+  bool display = recentTail != nullptr;
+
   lcd.setCursor(RECENT_POSITION, row);
-  if (showComma)
+  if (display && showComma)
     lcd.print(',');
+  else
+    lcd.print(' ');
 
   lcd.setCursor(RECENT_POSITION + 1, row);
-  //? TODO: rightjustify?
-  String tailVal = rightJustify3Digits(recentTail == nullptr ? 0 : recentTail->val);
-  // String tailVal = String(recentTail == nullptr ? -1 : recentTail->val);
-  // rightPad(tailVal, 3);
+  String tailVal = display ? rightJustify3Digits(recentTail->val) : F("   ");
   lcd.print(tailVal);
 }
 
 void displayAverage(int row, bool showComma) {
+  bool display = recentHead != nullptr;
+
   lcd.setCursor(RECENT_POSITION, row);
-  if (showComma)
+  if (display && showComma)
     lcd.print(',');
+  else
+    lcd.print(' ');
 
   lcd.setCursor(RECENT_POSITION + 1, row);
-  String avrgS = rightJustify3Digits(calculateAverage());
-  lcd.print(avrgS);
+  String avrg = display ? rightJustify3Digits(calculateAverage()) : F("   ");
+  lcd.print(avrg);
 }
 
-int calculateAverage() { // O(n)
+uint calculateAverage() { // O(n)
   if (recentHead == nullptr)
     return 0;
 
+  uint sum = recentHead->val;
   RecentNode *node = recentHead->next;
-  int sum = recentHead->val;
 
   while (node != nullptr) {
     sum += node->val;
