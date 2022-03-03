@@ -3,7 +3,7 @@
 
 #define SCROLL_CHARS 2
 #define SCROLL_TIMEOUT 1000
-#define DESC_DISPLAY_LEN 7
+#define DESC_DISPLAY_LEN 6
 
 void displayChannelName(int row, Channel *ch);
 
@@ -25,11 +25,11 @@ void displayChannelName(int row, Channel *ch) {
     case SCROLL_START:
       // only need to scroll if channel desc is too big
       if (dLen > DESC_DISPLAY_LEN)
-        state = SCROLL_MID;
+        state = SCROLLING;
 
       break;
 
-    case SCROLL_MID:
+    case SCROLLING:
       if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
         ch->scrollIndex += SCROLL_CHARS;
         // once full desc has been displayed, return to start
@@ -41,7 +41,7 @@ void displayChannelName(int row, Channel *ch) {
       }
       break;
 
-    // not really needed? can be handled in SCROLL_MID
+    // not really needed? can be handled in SCROLLING
     case SCROLL_END:
       ch->scrollIndex = 0;
       state = SCROLL_START;

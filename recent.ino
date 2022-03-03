@@ -1,90 +1,96 @@
 // TODO: put all in 1 file
-// TODO: put in documentation that recent on top & average on bottom
+// TODO: put in documentation that avrg on top & recent on bottom
 
 #define MAX_SIZE 64
 
-void addRecentValue(byte val);
-void displayAverage(int row); // top row
-void displayMostRecentValue(int row); // bottom row
+// showComma = false if there is no data value displayed on left
 
-// use a singly linked list to store most recent values
-// was difficult to think of how to impl recent!
-// basic singly-linked-list with only tail addition (polling?)
+void addRecentValue(byte val);
+void displayAverage(int row, bool showComma); // top row
+void displayMostRecentValue(int row, bool showComma); // bottom row
+
+// was difficult to think of how to impl RECENT!
+// basic singly-linked-list with only tail addition (polling? is that the term)
+// but with a max size, which once reached, head value is discarded
 typedef struct node_s {
   byte val;
   struct node_s *next;
-} Node;
+} RecentNode;
 
-Node *head = nullptr;
-Node *tail = nullptr; // keep track of tail for O(1) insertion instead of O(n)
+RecentNode *recentHead = nullptr;
+RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
 
-// should be kept 'up to date'
-byte _len = 0;
+byte _recentLen = 0;
 
-static struct node_s *_newNode(byte val) {
-  Node *node = (Node*) malloc(sizeof(*node));
+struct node_s *_newNode(byte val) {
+  RecentNode *node = (RecentNode*) malloc(sizeof(*node));
   node->val = val;
   node->next = nullptr;
   return node;
 }
 
 void addRecentValue(byte val) {  // O(1)
-  if (head == nullptr) {
-    head = _newNode(val);
-    tail = head;
-    _len = 1;
+  if (recentHead == nullptr) {
+    recentHead = _newNode(val);
+    recentTail = recentHead;
+    _recentLen = 1;
     return;
   }
 
   // because we only care about the most recent MAX_SIZE values, we can discard (free)
   // the oldest value, like an LRU cache
-  if (_len == MAX_SIZE) {
-    Node *oldHead = head;
-    head = head->next;
+  if (_recentLen == MAX_SIZE) {
+    RecentNode *oldHead = recentHead;
+    recentHead = recentHead->next;
     free(oldHead);
-    _len--;
+    _recentLen--;
   }
 
-  Node *node = _newNode(val);
-  tail->next = node;
-  tail = node;
-  _len++;
+  RecentNode *node = _newNode(val);
+  recentTail->next = node;
+  recentTail = node;
+  _recentLen++;
 }
 
-void displayMostRecentValue(int row) { // O(1)
+void displayMostRecentValue(int row, bool showComma) { // O(1)
   lcd.setCursor(RECENT_POSITION, row);
-  lcd.print(',');
+  if (showComma)
+    lcd.print(',');
+
+  lcd.setCursor(RECENT_POSITION + 1, row);
   //? TODO: rightjustify?
-  String tailVal = String(tail == nullptr ? -1 : tail->val);
-  rightPad(tailVal, 3);
+  String tailVal = rightJustify3Digits(recentTail == nullptr ? 0 : recentTail->val);
+  // String tailVal = String(recentTail == nullptr ? -1 : recentTail->val);
+  // rightPad(tailVal, 3);
   lcd.print(tailVal);
 }
 
-void displayAverage(int row) {
+void displayAverage(int row, bool showComma) {
   lcd.setCursor(RECENT_POSITION, row);
-  lcd.print(',');
-  //? TODO: rightjustify?
-  String avrgS = String(calculateAverage());
-  rightPad(avrgS, 3);
+  if (showComma)
+    lcd.print(',');
+
+  lcd.setCursor(RECENT_POSITION + 1, row);
+  String avrgS = rightJustify3Digits(calculateAverage());
   lcd.print(avrgS);
 }
 
 int calculateAverage() { // O(n)
-  if (head == nullptr)
-    return -1;
+  if (recentHead == nullptr)
+    return 0;
 
-  Node *node = head->next;
-  int sum = head->val;
+  RecentNode *node = recentHead->next;
+  int sum = recentHead->val;
 
   while (node != nullptr) {
     sum += node->val;
     node = node->next;
   }
 
-  return sum / _len;
+  return round(sum / _recentLen);
 }
 
-// debug - to check if head gets deleted
+// debug - to check if recentHead gets deleted
 void _addSixtyOnce() {
   static bool done = false;
 
@@ -98,16 +104,16 @@ void _addSixtyOnce() {
 // debug
 void _printAll(Print &p) {
   p.print(F("DEBUG: r_len="));
-  p.print(_len);
+  p.print(_recentLen);
   p.print(F(" ["));
 
-  if (head == nullptr) {
+  if (recentHead == nullptr) {
     p.println(']');
     return;
   }
 
-  p.print(head->val);
-  Node *node = head->next;
+  p.print(recentHead->val);
+  RecentNode *node = recentHead->next;
   while (node != nullptr) {
     p.print(',');
     p.print(node->val);
