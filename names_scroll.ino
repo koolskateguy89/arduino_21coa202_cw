@@ -1,9 +1,9 @@
 // TODO: put all in 1 file
 // NAMES and SCROLL together
 
-#define SCROLL_CHARS 2
-#define SCROLL_TIMEOUT 1000
-#define DESC_DISPLAY_LEN 6
+#define SCROLL_CHARS      2
+#define SCROLL_TIMEOUT    1000
+#define DESC_DISPLAY_LEN  6
 
 void displayChannelName(int row, Channel *ch);
 
