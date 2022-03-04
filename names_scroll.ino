@@ -14,7 +14,7 @@ void displayChannelName(int row, Channel *ch) {
   const byte si = ch->scrollIndex;
 
   lcd.setCursor(DESC_POSITION, row);
-  String textToDisplay = ch->description.substring(si, si + DESC_DISPLAY_LEN);
+  String textToDisplay = ch->description.substring(si, min(dLen, si + DESC_DISPLAY_LEN));
   rightPad(textToDisplay, DESC_DISPLAY_LEN);
   lcd.print(textToDisplay);
 
@@ -22,11 +22,11 @@ void displayChannelName(int row, Channel *ch) {
 
   // SCROLL
   switch (state) {
+    // not really a state
     case SCROLL_START:
       // only need to scroll if channel desc is too big
       if (dLen > DESC_DISPLAY_LEN)
         state = SCROLLING;
-
       break;
 
     case SCROLLING:

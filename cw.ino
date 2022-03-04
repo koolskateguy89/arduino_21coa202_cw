@@ -5,6 +5,7 @@
 // #include <avr/eeprom.h> // TODO: EEPROM
 
 #define STUDENT_ID F("    F120840     ")
+#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,RECENT,NAMES,SCROLL")
 
 #define NCOLORS  7
 #define BL_OFF 0x0
@@ -24,13 +25,12 @@
 #define TOP_CURSOR     0, TOP_LINE
 #define BOTTOM_CURSOR  0, BOTTOM_LINE
 
+// column
 #define ARROW_POSITION   0
 #define ID_POSITION      1
 #define DATA_POSITION    2
 #define RECENT_POSITION  5
 #define DESC_POSITION    10
-
-#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,RECENT,NAMES,SCROLL")
 
 #define isCreateCommand(cmdId) (cmdId == 'C')
 #define isValueCommand(cmdId)  (cmdId == 'V' || cmdId == 'X' || cmdId == 'N')
@@ -475,13 +475,15 @@ void _printChannelsFull(Print &p) {
 void readCreateCommand(Channel **topChannel) {
   String cmd = Serial.readStringUntil('\n');
 
-  char channelId = cmd[0];
-  //! TODO: check isUpper(channelId)
-  String description = cmd.substring(1, 1 + MAX_DESC_LENGTH);
-  if (description.length() == 0) {
+  uint cmdLen = cmd.length();
+  if (cmdLen < 2) {
     messageError('C', cmd);
     return;
   }
+
+  char channelId = cmd[0];
+  //! TODO: check isUpper(channelId)
+  String description = cmd.substring(1, min(cmdLen, 1 + MAX_DESC_LENGTH));
 
   Serial.println("desc: [" + description + "]");
   createChannelImpl(channelId, description);
@@ -559,7 +561,8 @@ void readCreateCommand(Channel **topChannel) {
 void readValueCommand(char cmdId) {
   String cmd = Serial.readStringUntil('\n');
 
-  if (cmd.length() < 2 || cmd.length() > 4) {
+  uint cmdLen = cmd.length();
+  if (cmdLen < 2 || cmdLen > 4) {
     messageError(cmd);
     return;
   }
