@@ -1,11 +1,13 @@
-// #include <Wire.h>
+#include <Wire.h>
 #include <Adafruit_RGBLCDShield.h>
-// #include <utility/Adafruit_MCP23017.h>
-#include <avr/eeprom.h> // TODO: EEPROM
+#include <utility/Adafruit_MCP23017.h>
+// #include <EEPROM.h>
+// #include <avr/eeprom.h> // TODO: EEPROM
 
 #define STUDENT_ID F("    F120840     ")
 
 #define NCOLORS  7
+#define BL_OFF 0x0
 #define RED    0x1
 #define GREEN  0x2
 #define YELLOW 0x3
@@ -30,19 +32,17 @@
 
 #define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,RECENT,NAMES,SCROLL")
 
-#define isCreateCommand(c)  c == 'C'
-#define isValueCommand(c)   c == 'V' || c == 'X' || c == 'N'
+#define isCreateCommand(cmdId) (cmdId == 'C')
+#define isValueCommand(cmdId)  (cmdId == 'V' || cmdId == 'X' || cmdId == 'N')
+#define isOutOfRange(value)    (value < 0 || value > 255)
 
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
 
 // UDCHARS
-#define hideTopArrow() hideArrow(TOP_LINE)
+#define hideTopArrow()    hideArrow(TOP_LINE)
 #define hideBottomArrow() hideArrow(BOTTOM_LINE)
 
-#define DEBUG 0
-
-// currently, static = doesn't use any globals
 
 /* data types */
 typedef unsigned int uint;
@@ -77,11 +77,32 @@ typedef enum scroll_state_e {
 Benefits of implementing channels as a LL instead of array[26]:
 - better memory usage as memory for a channel will be allocated on demand
 - easier to get prev/next channel if some channels haven't been created
+
+I could've used:
+  Channel *array[26];
+  for (size_t i = 0; i < 26; i++)
+    array[i] = nullptr;
+ahh I think that might be better
+ - easier getting previous channel
+ - logic is simpler cos not implementing linkedlist
 */
 // singly-linked-list, impl. similar to a TreeSet<Byte> (Java)
 // creating new channel will just insert it between 2 nodes
 // takes 21 -> ~103 bytes
+
+// only 465 bytes free when all 26 taken
+// 360B sfter 20 valus entered
+// 335 25
+// 153B after > 64 values entered lets gooo
 typedef struct channel_s {
+  channel_s(char id) {
+    this->id = id;
+    this->setDescription("");
+    this->data = this->min = 0;
+    this->max = 255;
+    this->next = nullptr;
+  }
+
   char id;
   String description;
   byte data, max, min;
@@ -92,8 +113,8 @@ typedef struct channel_s {
   ulong lastScrollTime;
   ScrollState scrollState;
 
-  void setDescription(const String desc) {
-    description = desc;
+  void setDescription(const String description) {
+    this->description = description;
     // SCROLL
     // reset scrolling
     scrollIndex = lastScrollTime = 0;
@@ -104,11 +125,12 @@ typedef struct channel_s {
 
 /* function prototypes */
 // main (is that gonna be state name?)
-void messageError(const String &cmd);
-// reading commands
+// reading commands (main)
 void readCreateCommand(Channel **topChannel);
 void readValueCommand(char cmdId);
-void messageError(const String &cmd);
+void messageError(char cmdId, const String &cmd);
+// handling button presses (main)
+// TODO
 // channels
 Channel *createChannelImpl(char id, const String description);
 Channel *channelForId(char id);
@@ -118,14 +140,14 @@ bool channelHasBeenCreated(char id);
 bool canGoUp(const Channel *topChannel);
 bool canGoDown(const Channel *topChannel);
 // display
-void displayChannel(int row, Channel *ch);
-void clearChannelRow(int row);
+void displayChannel(uint8_t row, Channel *ch);
+void clearChannelRow(uint8_t row);
 void updateDisplay(Channel *topChannel);
 void updateBacklight();
 void selectDisplay();
 // utils
-String rightJustify3Digits(int num);
-void rightPad(String &str, int desiredLen);
+String rightJustify3Digits(uint num);
+void rightPad(String &str, size_t desiredLen);
 void skipLine(Stream &s);
 
 /* extensions */
@@ -135,6 +157,11 @@ void showDownArrow(int row = BOTTOM_LINE);
 void hideArrow(int row);
 // FREERAM
 void displayFreeMemory(int row = BOTTOM_LINE);
+// EEPROM
+void readEeprom();
+void updateEEPROMDesc(char id, const String desc);
+void updateEepromMax(char id, byte max);
+void updateEepromMin(char id, byte min);
 // RECENT
 void addRecentValue(byte val);
 void displayAverage(int row = TOP_LINE, bool showComma = true);
@@ -160,7 +187,7 @@ void loop() {
   static Channel *topChannel; // btmChannel = topChannel->next
   static ulong selectPressTime;
 
-  int b;
+  uint8_t b;
 
   switch (state) {
   case INITIALISATION:
@@ -188,7 +215,6 @@ void loop() {
     state = MAIN;
     break;
 
-  // first channel has been made
   case MAIN: // basically AWAITING_PRESS & AWAITING_MESSAGE
     updateDisplay(topChannel);
     b = lcd.readButtons();
@@ -211,9 +237,11 @@ void loop() {
     if (Serial.available()) {
       char cmdId = Serial.read();
 
-      if (isCreateCommand(cmdId))
+      if (isCreateCommand(cmdId)) {
         readCreateCommand(&topChannel);
-      else if (isValueCommand(cmdId))
+        //! debug (remove once checked EEPROM)
+        _printChannelsFull(Serial);
+      } else if (isValueCommand(cmdId))
         readValueCommand(cmdId);
       else
         skipLine(Serial);
@@ -262,6 +290,7 @@ void loop() {
   //* or DisplayState - I think this makes more sense (NORMAL, SELECT)
   case SELECT_AWAITING_RELEASE:  // select is currently being held (has already been held for 1+ second
     Serial.println(F("DEBUG: Awaiting SELECT release"));
+    // if SELECT has been released
     if (!(lcd.readButtons() & BUTTON_SELECT)) {
       Serial.println(F("DEBUG: SELECT released"));
       lcd.clear();
@@ -276,7 +305,7 @@ void loop() {
     static char id = 'A';
     static bool top = true;
 
-    Channel& ch = channels[i];
+    Channel &ch = channels[i];
     ch.data = random(256);
     displayChannel(top ? 0 : 1, ch);
     // lcd.setBacklight(i % 7);
@@ -318,12 +347,8 @@ Channel *createChannelImpl(char id, const String description) {
   if (ch == nullptr) {
     Serial.print(F("DEBUG: Making new channel with id "));
     Serial.println(id);
-    // shouldn't free because 'all channels will be used'
-    ch = (Channel*) malloc(sizeof(*ch));
-    ch->id = id;
-    ch->data = ch->min = 0;
-    ch->max = 255;
-    ch->next = nullptr;
+    // shouldn't free/delete because 'all channels will be used'
+    ch = new Channel(id);
     _insertChannel(ch);
   }
 
@@ -367,6 +392,14 @@ bool channelHasBeenCreated(char id) {
   return channelForId(id) != nullptr;
 }
 
+bool canGoUp(const Channel *topChannel) {
+  return topChannel != headChannel;
+}
+
+bool canGoDown(const Channel *topChannel) {
+  return topChannel != nullptr && topChannel->next != nullptr && topChannel->next->next != nullptr;
+}
+
 // debug
 void _printChannels(Print &p) {
   // p.print(F("DEBUG: ch_len?"));
@@ -392,7 +425,8 @@ void _printChannels(Print &p) {
 }
 
 // debug
-void _printChannel(Print &p, const Channel *ch) {
+void _printChannel(Print &p, const Channel *ch, bool newLine = true);
+void _printChannel(Print &p, const Channel *ch, bool newLine) {
   p.print(F("DEBUG: Channel "));
   p.print(ch->id);
 
@@ -405,32 +439,49 @@ void _printChannel(Print &p, const Channel *ch) {
   p.print(F(", min="));
   p.print(ch->min);
 
-  p.print(F(", description=["));
+  p.print(F(", description={"));
   p.print(ch->description);
+  p.print('}');
+
+  if (newLine)
+    p.println();
+}
+
+void _printChannelsFull(Print &p) {
+  p.println(F("DEBUG: fullChannels = ["));
+
+  if (headChannel == nullptr) {
+    p.println(']');
+    return;
+  }
+
+  _printChannel(Serial, headChannel);
+  Channel *node = headChannel->next;
+  while (node != nullptr) {
+    _printChannel(Serial, node);
+    node = node->next;
+  }
+
   p.println(']');
 }
 
-bool canGoUp(const Channel *topChannel) {
-  return topChannel != headChannel;
-}
-
-bool canGoDown(const Channel *topChannel) {
-  return topChannel != nullptr && topChannel->next != nullptr && topChannel->next->next != nullptr;
-}
+/* reading commands */
 
 // for some reason Serial sometimes says 0 chars available even tho
-// some have beeen sent over
+// some have been sent over
 // Serial.flush before reading seems to fix this
 //! NOT ANYMORE! IT JUST DOESNT WANT TO CONSITENTLY WORK NOR NOT WORK
-//! TODO: messageError
+//* it works fine with readStringUntil
 void readCreateCommand(Channel **topChannel) {
-  String cmd = Serial.readString();
-  cmd.replace("\n", "");
-  char channelId = cmd[0];
-  String description = cmd.substring(1, 1 + MAX_DESC_LENGTH);
+  String cmd = Serial.readStringUntil('\n');
 
-  if (description.length() == 0)
+  char channelId = cmd[0];
+  //! TODO: check isUpper(channelId)
+  String description = cmd.substring(1, 1 + MAX_DESC_LENGTH);
+  if (description.length() == 0) {
+    messageError('C', cmd);
     return;
+  }
 
   Serial.println("desc: [" + description + "]");
   createChannelImpl(channelId, description);
@@ -505,25 +556,28 @@ void readCreateCommand(Channel **topChannel) {
   */
 }
 
-//! TODO: messageError
 void readValueCommand(char cmdId) {
-  String cmd = Serial.readString();
-  cmd.replace("\n", "");
+  String cmd = Serial.readStringUntil('\n');
 
-  if (cmd.length() < 2 || cmd.length() > 4)
+  if (cmd.length() < 2 || cmd.length() > 4) {
+    messageError(cmd);
     return;
+  }
 
   char channelId = cmd[0];
   String valueS = cmd.substring(1);
-  long value = valueS.toInt();;
+  long value = valueS.toInt();
 
-  if (value == 0 && valueS != "")
+  if (!isUpper(channelId)
+      || (value == 0 && valueS != "0") // input wasn't numeric
+      || isOutOfRange(value)
+     ) {
+    messageError(cmd);
     return;
-  if (value < 0 || value > 255)
-    return;
+  }
 
   Channel *ch = channelForId(channelId);
-  // if channel hasn't been created
+  // if channel hasn't been created, don't do anything
   if (ch == nullptr)
     return;
 
@@ -546,7 +600,7 @@ void readValueCommand(char cmdId) {
   }
 
   uint value = 0;
-  byte i = 0;
+  int i = 0;
 
   Serial.flush();
 
@@ -582,14 +636,17 @@ void readValueCommand(char cmdId) {
   */
 }
 
-void messageError(const String &cmd) {
-  Serial.print(F("ERROR: {"));
-  Serial.print(cmd);
-  Serial.print(F("}, length="));
-  Serial.println(cmd.length());
+void messageError(char cmdId, const String &cmd) {
+  Serial.print(F("ERROR: "));
+  Serial.print(cmdId);
+  Serial.println(cmd);
+  // Serial.print(F(", length="));
+  // Serial.println(1 + cmd.length());
 }
 
-void displayChannel(int row, Channel *ch) {
+/* display */
+
+void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(ch->id);
   lcd.setCursor(DATA_POSITION, row);
@@ -599,7 +656,7 @@ void displayChannel(int row, Channel *ch) {
   displayChannelName(row, ch);
 }
 
-void clearChannelRow(int row) {
+void clearChannelRow(uint8_t row) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(F("    "));
 }
@@ -607,7 +664,7 @@ void clearChannelRow(int row) {
 void updateDisplay(Channel *const topChannel) {
   updateBacklight();
 
-  // UDCHARS
+  // UDCHARS,HCI
   if (canGoUp(topChannel))
     showUpArrow();
   else
@@ -648,10 +705,11 @@ void updateBacklight() {
   Channel *ch = headChannel;
 
   while (ch != nullptr) {
-    if (ch->data < ch->min)
-      color |= GREEN;
-    else if (ch->data > ch->max)
+    //! update once module leader answers questions
+    if (ch->data > ch->max)
       color |= RED;
+    else if (ch->data < ch->min)
+      color |= GREEN;
 
     // early exit, already reached worst case
     if (color == YELLOW)
@@ -676,7 +734,7 @@ void selectDisplay() {
 
 /* Utility functions */
 
-String rightJustify3Digits(int num) {
+String rightJustify3Digits(uint num) {
   if (num >= 100)
     return String(num);
 
@@ -686,7 +744,7 @@ String rightJustify3Digits(int num) {
 }
 
 // pad spaces to the right of given string, to help overwrite old values
-void rightPad(String &str, int desiredLen) {
+void rightPad(String &str, size_t desiredLen) {
   int diff = desiredLen - str.length();
   while (diff > 0) {
     str.concat(' ');
@@ -694,7 +752,7 @@ void rightPad(String &str, int desiredLen) {
   }
 }
 
-//!
+//! may not use
 void skipLine(Stream &s) {
   s.flush();
   s.find('\n');
