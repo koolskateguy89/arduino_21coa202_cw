@@ -6,9 +6,14 @@
 // showComma = false if there is no data value displayed on left
 
 void addRecentValue(byte val);
-void displayAverage(int row, bool showComma); // top row
-void displayMostRecentValue(int row, bool showComma); // bottom row
+void displayAverage(int row, bool display); // top row
+void displayMostRecentValue(int row, bool display); // bottom row
 uint calculateAverage();
+
+// TODO: make this into a namespace?
+namespace RECENT {
+
+}
 
 // was difficult to think of how to impl RECENT!
 // basic singly-linked-list with only tail addition (polling? is that the term)
@@ -50,30 +55,22 @@ void addRecentValue(byte val) {  // O(1)
   _recentLen++;
 }
 
-void displayMostRecentValue(int row, bool showComma) { // O(1)
-  bool display = recentTail != nullptr;
+void displayMostRecentValue(int row, bool display) { // O(1)
+  display &= recentTail != nullptr;
 
   lcd.setCursor(RECENT_POSITION, row);
-  if (display && showComma)
-    lcd.print(',');
-  else
-    lcd.print(' ');
+  lcd.print(display ? ',' : ' ');
 
-  lcd.setCursor(RECENT_POSITION + 1, row);
   String tailVal = display ? rightJustify3Digits(recentTail->val) : F("   ");
   lcd.print(tailVal);
 }
 
-void displayAverage(int row, bool showComma) {
-  bool display = recentHead != nullptr;
+void displayAverage(int row, bool display) {
+  display &= recentHead != nullptr;
 
   lcd.setCursor(RECENT_POSITION, row);
-  if (display && showComma)
-    lcd.print(',');
-  else
-    lcd.print(' ');
+  lcd.print(display ? ',' : ' ');
 
-  lcd.setCursor(RECENT_POSITION + 1, row);
   String avrg = display ? rightJustify3Digits(calculateAverage()) : F("   ");
   lcd.print(avrg);
 }

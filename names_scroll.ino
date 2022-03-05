@@ -21,6 +21,9 @@ void displayChannelName(int row, Channel *ch) {
   ScrollState &state = ch->scrollState;
 
   // SCROLL
+  /*
+  tbh this could just be a bunch of ifs, it's not really a state
+  */
   switch (state) {
     // not really a state
     case SCROLL_START:
