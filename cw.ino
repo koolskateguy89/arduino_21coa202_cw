@@ -1,6 +1,8 @@
 #include <Wire.h>
 #include <Adafruit_RGBLCDShield.h>
 #include <utility/Adafruit_MCP23017.h>
+#include <EEPROM.h>
+#include <avr/eeprom.h>
 
 #define STUDENT_ID             F("    F120840     ")
 #define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,EEPROM,RECENT,NAMES,SCROLL")
@@ -233,13 +235,6 @@ void rightPad(String &str, size_t desiredLen);
 void skipLine(Stream &s);
 
 /* extensions */
-// EEPROM
-void updateEEPROM(const Channel *ch);
-Channel *readEeprom();
-// RECENT
-void addRecentValue(byte val);
-void displayAverage(int row = TOP_LINE, bool display = true);
-void displayMostRecentValue(int row = BOTTOM_LINE, bool display = true);
 // NAMES,SCROLL
 void displayChannelName(int row, Channel *ch);
 
@@ -275,7 +270,6 @@ namespace UDCHARS {
   }
 }
 
-
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
@@ -284,27 +278,275 @@ extern char *__brkval;
 #endif // __arm__
 namespace FREERAM {
   void displayFreeMemory(int row = BOTTOM_LINE);
-  uint freeMemory();
-    
+  
+  namespace { // private
+    uint freeMemory() {
+      char top;
+      #ifdef __arm__
+      return &top - reinterpret_cast<char*>(sbrk(0));
+      #elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+      return &top - __brkval;
+      #else // __arm__
+      return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+      #endif // __arm__
+    }
+  }
+
   void displayFreeMemory(int row) {
     lcd.setCursor(0, row);
     lcd.print(F("Free bytes:"));
     lcd.print(freeMemory());
   }
+}
 
-  uint freeMemory() {
-    char top;
-    #ifdef __arm__
-    return &top - reinterpret_cast<char*>(sbrk(0));
-    #elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-    return &top - __brkval;
-    #else // __arm__
-    return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-    #endif // __arm__
+namespace HCI {
+  // TODO
+}
+
+/*
+ * _ to avoid any name conflicts
+ *
+ * Each channel occupies 19 bytes in EEPROM:
+ * 1 id
+ * 1 max
+ * 1 min
+ * 1 desc_length
+ * 15 desc
+
+* I think I still might need some other error-checking mechanism
+*/
+namespace _EEPROM {
+  #define addressForId(id)   ((id - 'A') * 19)
+  #define maxOffset(idAddr)  (idAddr + 1)
+  #define minOffset(idAddr)  (idAddr + 2)
+  #define descOffset(idAddr) (idAddr + 3)
+
+  void updateEEPROM(const Channel *ch);
+  Channel *readEEPROM();
+
+  namespace {
+    void writeString(int offset, const String &desc) {
+      const byte len = desc.length();
+      EEPROM.update(offset, len);
+
+      for (int i = 0; i < len; i++) {
+        EEPROM.update(offset + 1 + i, desc[i]);
+      }
+    }
+
+    // returns whether the length is valid or not
+    bool readString(int offset, String &desc) {
+      const byte len = EEPROM[ offset ];
+      if (len > MAX_DESC_LENGTH)
+        return false;
+
+      for (int i = 0; i < len; i++) {
+        desc += (char) EEPROM[ offset + 1 + i ];
+      }
+
+      return true;
+    }
+
+    Channel *readChannel(uint addr, char id) {
+      String desc;
+      // if the stored description isn't valid
+      if (!readString(descOffset(addr), desc))
+        return nullptr;
+
+      byte max = EEPROM[ maxOffset(addr) ];
+
+      byte min = EEPROM[ minOffset(addr) ];
+
+      Channel *ch = new Channel(id);
+      ch->setDescription(desc);
+      ch->max = max;
+      ch->min = min;
+
+      return ch;
+    }
   }
+
+  void updateEEPROM(const Channel *ch) {
+    if (ch == nullptr)
+     return;
+
+    uint addr = addressForId(ch->id);
+
+    EEPROM.update(addr, ch->id);
+    EEPROM.update(maxOffset(addr), ch->max);
+    EEPROM.update(minOffset(addr), ch->min);
+
+    writeString(descOffset(addr), ch->description);
+  }
+
+  // returns the head channel
+  Channel *readEEPROM() {
+    Channel *head = nullptr;
+    Channel *tail = nullptr;
+
+    for (char id = 'A'; id <= 'Z'; id++) {
+      uint addr = addressForId(id);
+
+      // basic verification
+      byte readId = EEPROM.read(addr);
+      if (readId != id)
+        continue;
+
+      Channel *ch = readChannel(addr, id);
+
+      if (head == nullptr) {
+        head = tail = ch;
+      } else if (ch != nullptr) {
+        tail->next = ch;
+        tail = ch;
+      }
+    }
+
+    return head;
+  }
+
+  // will cause reading that id to return nullptr
+  void invalidate(char id) {
+    EEPROM.update(addressForId(id), 0);
+  }
+
+  void invalidateAll() {
+    for (char id = 'A'; id <= 'Z'; id++)
+      EEPROM.update(addressForId(id), 0);
+  }
+
 }
 
 
+// was difficult to think of how to impl RECENT!
+// basic singly-linked-list with only tail addition (polling? is that the term)
+// but with a max size, which once reached, adding will discard head value
+namespace RECENT {
+  #define MAX_SIZE 64
+
+  void addRecentValue(byte val);
+
+  void _displayAverage(int row, bool display);
+  #define displayAverage(display) _displayAverage(TOP_LINE, display)
+
+  void _displayMostRecentValue(int row, bool display);
+  #define displayMostRecentValue(display) _displayMostRecentValue(BOTTOM_LINE, display)
+
+  namespace {
+    typedef struct node_s {
+      node_s(byte val) {
+        this->val = val;
+        this->next = nullptr;
+      }
+
+      byte val;
+      struct node_s *next;
+    } RecentNode;
+
+    uint calculateAverage();
+
+    RecentNode *recentHead = nullptr;
+    RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
+
+    size_t _recentLen = 0;
+
+    // could use a running sum to make this O(1)
+    uint calculateAverage() { // O(n)
+      if (recentHead == nullptr)
+        return 0;
+
+      uint sum = recentHead->val;
+      RecentNode *node = recentHead->next;
+
+      while (node != nullptr) {
+        sum += node->val;
+        node = node->next;
+      }
+
+      return round(sum / _recentLen);
+    }
+
+    // debug - to check if recentHead gets deleted
+    void _addSixtyOnce() {
+      static bool done = false;
+
+      if (!done) {
+        for (byte i = 0; i < 60; i++)
+          RECENT::addRecentValue(random(0, 256));
+        done = true;
+      }
+    }
+
+    // debug
+    void _printAll(Print &p) {
+      p.print(F("DEBUG: r_len="));
+      p.print(_recentLen);
+      p.print(F(", ["));
+
+      if (recentHead == nullptr) {
+        p.println(F("DEBUG: ]"));
+        return;
+      }
+
+      p.print(recentHead->val);
+      RecentNode *node = recentHead->next;
+      while (node != nullptr) {
+        p.print(',');
+        p.print(node->val);
+        node = node->next;
+      }
+
+      p.println(F("DEBUG: ]"));
+    }
+
+  }
+
+  void addRecentValue(byte val) {  // O(1)
+    if (recentHead == nullptr) {
+      recentHead = recentTail = new RecentNode(val);
+      _recentLen = 1;
+      return;
+    }
+
+    // because we only care about the most recent MAX_SIZE values, we can discard (delete)
+    // the oldest value, kind of like an LRU cache
+    if (_recentLen == MAX_SIZE) {
+      RecentNode *oldHead = recentHead;
+      recentHead = recentHead->next;
+      delete oldHead;
+      _recentLen--;
+    }
+
+    RecentNode *node = new RecentNode(val);
+    recentTail->next = node;
+    recentTail = node;
+    _recentLen++;
+  }
+
+  void _displayMostRecentValue(int row, bool display) { // O(1)
+    display &= recentTail != nullptr;
+
+    lcd.setCursor(RECENT_POSITION, row);
+    lcd.print(display ? ',' : ' ');
+
+    String tailVal = display ? rightJustify3Digits(recentTail->val) : F("   ");
+    lcd.print(tailVal);
+  }
+
+  void _displayAverage(int row, bool display) {
+    display &= recentHead != nullptr;
+
+    lcd.setCursor(RECENT_POSITION, row);
+    lcd.print(display ? ',' : ' ');
+
+    String avrg = display ? rightJustify3Digits(calculateAverage()) : F("   ");
+    lcd.print(avrg);
+  }
+}
+
+namespace NAMES_SCROLL {
+
+}
 
 void setup() {
   Serial.begin(9600);
@@ -324,7 +566,7 @@ void loop() {
     selectPressTime = 0;
 
     // EEPROM
-    topChannel = headChannel = readEeprom();
+    topChannel = headChannel = _EEPROM::readEEPROM();
     _printChannelsFull(Serial, topChannel);
 
     state = SYNCHRONISATION;
@@ -558,7 +800,7 @@ void readCreateCommand(Channel **topChannel) {
     *topChannel = ch;
   }
 
-  updateEEPROM(ch);
+  _EEPROM::updateEEPROM(ch);
 }
 
 void readValueCommand(char cmdId) {
@@ -588,14 +830,14 @@ void readValueCommand(char cmdId) {
     return;
 
   if (cmdId == 'V') {
-    addRecentValue(value);
+    RECENT::addRecentValue(value);
     ch->setData(value);
   } else if (cmdId == 'X')
     ch->max = value;
   else
     ch->min = value;
 
-  updateEEPROM(ch);
+  _EEPROM::updateEEPROM(ch);
 }
 
 void messageError(char cmdId, const String &cmd) {
@@ -642,8 +884,8 @@ void updateDisplay(Channel *const topChannel) {
   }
 
   // RECENT
-  displayAverage(TOP_LINE, topChannel != nullptr);
-  displayMostRecentValue(BOTTOM_LINE, btmChannel != nullptr);
+  RECENT::displayAverage(/*TOP_LINE, */topChannel != nullptr);
+  RECENT::displayMostRecentValue(/*BOTTOM_LINE, */btmChannel != nullptr);
 }
 
 /*
