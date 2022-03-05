@@ -233,8 +233,6 @@ void rightPad(String &str, size_t desiredLen);
 void skipLine(Stream &s);
 
 /* extensions */
-// FREERAM
-void displayFreeMemory(int row = BOTTOM_LINE);
 // EEPROM
 void updateEEPROM(const Channel *ch);
 Channel *readEeprom();
@@ -276,6 +274,36 @@ namespace UDCHARS {
     lcd.write(ch);
   }
 }
+
+
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else // __ARM__
+extern char *__brkval;
+#endif // __arm__
+namespace FREERAM {
+  void displayFreeMemory(int row = BOTTOM_LINE);
+  uint freeMemory();
+    
+  void displayFreeMemory(int row) {
+    lcd.setCursor(0, row);
+    lcd.print(F("Free bytes:"));
+    lcd.print(freeMemory());
+  }
+
+  uint freeMemory() {
+    char top;
+    #ifdef __arm__
+    return &top - reinterpret_cast<char*>(sbrk(0));
+    #elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+    return &top - __brkval;
+    #else // __arm__
+    return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+    #endif // __arm__
+  }
+}
+
 
 
 void setup() {
@@ -660,7 +688,7 @@ void selectDisplay() {
   lcd.print(STUDENT_ID);
 
   // FREERAM
-  displayFreeMemory();
+  FREERAM::displayFreeMemory();
 }
 
 /* Utility functions */
