@@ -1,74 +1,112 @@
 #include <EEPROM.h>
-#include <avr/eeprom.h> // TODO: EEPROM
+#include <avr/eeprom.h>
 
 /*
-try and do some sort of operation on id so
-that there's a distance between them of at least (bytes):
- 15 (desc)
- +1  (max)
- +1  (min)
-
-A channel will take up 18 bytes:
+A channel will take up 19 bytes in EEPROM:
   1 id
-  15 desc
   1 max
   1 min
+  1 desc_length
+  15 desc
+
+* I think I still might need some other error-checking mechanism
 
 */
 
-// use eeprom_crc() to check if updated?
+#define addressForId(id) ((id - 'A') * 19)
 
-#define descLocation(idAddress)  idAddress + 1
-#define maxLocation(idAddress)   descLocation(idAddress) + MAX_DESC_LENGTH + 1
-#define minLocation(idAddress)   maxLocation(idAddress) + 1
+#define maxOffset(idAddr)  (idAddr + 1)
+#define minOffset(idAddr)  (idAddr + 2)
+#define descOffset(idAddr) (idAddr + 3)
 
-void readEeprom();
-void updateEEPROMDesc(char id, const String desc);
-void updateEepromMax(char id, byte max);
-void updateEepromMin(char id, byte min);
+void updateEEPROM(const Channel *ch);
+Channel *readEeprom();
 
-void readEeprom() {
-  for (char id = 'A'; id <= 'Z'; id++) {
-    int addr = _address(id);
-    int readId = EEPROM.read(addr);
-    if (readId != id)
-      continue;
+void updateEEPROM(const Channel *ch) {
+  if (ch == nullptr)
+    return;
 
-    String desc;
-    EEPROM.get(descLocation(addr), desc);
-    byte max;
-    EEPROM.get(maxLocation(addr), max);
-    byte min;
-    EEPROM.get(minLocation(addr), min);
+  uint addr = addressForId(ch->id);
 
-    Channel *ch = new Channel(id);
-    ch->setDescription(desc);
-    ch->max = max;
-    ch->min = min;
+  EEPROM.update(addr, ch->id);
+  EEPROM.update(maxOffset(addr), ch->max);
+  EEPROM.update(minOffset(addr), ch->min);
+
+  eepromWriteString(descOffset(addr), ch->description);
+}
+
+void eepromWriteString(int offset, const String &desc) {
+  const byte len = desc.length();
+  EEPROM.update(offset, len);
+
+  for (int i = 0; i < len; i++) {
+    EEPROM.update(offset + 1 + i, desc[i]);
   }
 }
 
-void updateEEPROMDesc(char id, const String desc) {
-  int addr = _writeId(id);
-  EEPROM.put(descLocation(addr), desc);
+// returns the head channel
+Channel *readEeprom() {
+  Channel *head = nullptr;
+  Channel *tail = nullptr;
+
+  for (char id = 'A'; id <= 'Z'; id++) {
+    uint addr = addressForId(id);
+
+    // basic verification
+    byte readId = EEPROM.read(addr);
+    if (readId != id)
+      continue;
+
+    Channel *ch = readChannelFromEeprom(addr, id);
+
+    if (head == nullptr) {
+      head = tail = ch;
+    } else {
+      tail->next = ch;
+      tail = ch;
+    }
+  }
+
+  return head;
 }
 
-void updateEepromMax(char id, byte max) {
-  int addr = _writeId(id);
-  EEPROM.put(maxLocation(addr), max);
+Channel *readChannelFromEeprom(uint addr, char id) {
+  String desc;
+  // if the stored description isn't valid
+  if (!eepromReadString(descOffset(addr), desc))
+    return nullptr;
+
+  byte max = EEPROM[ maxOffset(addr) ];
+
+  byte min = EEPROM[ minOffset(addr) ];
+
+  Channel *ch = new Channel(id);
+  ch->setDescription(desc);
+  ch->max = max;
+  ch->min = min;
+
+  return ch;
 }
 
-void updateEepromMin(char id, byte min) {
-  int addr = _writeId(id);
-  EEPROM.put(minLocation(addr), min);
+// returns whether the length is valid or not
+bool eepromReadString(int offset, String &desc) {
+  const byte len = EEPROM[ offset ];
+  if (len > MAX_DESC_LENGTH)
+    return false;
+
+  for (int i = 0; i < len; i++) {
+    desc += (char) EEPROM[ offset + 1 + i ];
+  }
+
+  return true;
 }
 
-int _address(char id) {
-  return (id - 'A') * 18;
+// will cause reading that id to return nullptr
+void invalidate(char id) {
+  EEPROM.update(addressForId(id), 0);
 }
-
-int _writeId(char id) {
-  int addr = _address(id);
-  EEPROM.update(addr, id);
-  return addr;
+void invalidateAll() {
+  for (char id = 'A'; id <= 'Z'; id++) {
+    EEPROM.update(addressForId(id), 0);
+  }
 }
