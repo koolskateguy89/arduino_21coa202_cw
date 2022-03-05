@@ -234,10 +234,6 @@ String rightJustify3Digits(uint num);
 void rightPad(String &str, size_t desiredLen);
 void skipLine(Stream &s);
 
-/* extensions */
-// NAMES,SCROLL
-void displayChannelName(int row, Channel *ch);
-
 
 /* globals */
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
@@ -278,7 +274,7 @@ extern char *__brkval;
 #endif // __arm__
 namespace FREERAM {
   void displayFreeMemory(int row = BOTTOM_LINE);
-  
+
   namespace { // private
     uint freeMemory() {
       char top;
@@ -313,8 +309,8 @@ namespace HCI {
  * 1 desc_length
  * 15 desc
 
-* I think I still might need some other error-checking mechanism
-*/
+ * I think I still might need some other error-checking mechanism
+ */
 namespace _EEPROM {
   #define addressForId(id)   ((id - 'A') * 19)
   #define maxOffset(idAddr)  (idAddr + 1)
@@ -416,7 +412,6 @@ namespace _EEPROM {
   }
 
 }
-
 
 // was difficult to think of how to impl RECENT!
 // basic singly-linked-list with only tail addition (polling? is that the term)
@@ -544,8 +539,56 @@ namespace RECENT {
   }
 }
 
+// NAMES and SCROLL together, it makes sense
 namespace NAMES_SCROLL {
+  #define SCROLL_CHARS      2
+  #define SCROLL_TIMEOUT    1000
+  #define DESC_DISPLAY_LEN  6
 
+  void displayChannelName(int row, Channel *ch);
+
+  void displayChannelName(int row, Channel *ch) {
+    const uint dLen = ch->description.length();
+    const byte si = ch->scrollIndex;
+
+    lcd.setCursor(DESC_POSITION, row);
+    String textToDisplay = ch->description.substring(si, min(dLen, si + DESC_DISPLAY_LEN));
+    rightPad(textToDisplay, DESC_DISPLAY_LEN);
+    lcd.print(textToDisplay);
+
+    ScrollState &state = ch->scrollState;
+
+    // SCROLL
+    /*
+    tbh this could just be a bunch of ifs, it's not really a state
+    */
+    switch (state) {
+      // not really a state
+      case SCROLL_START:
+        // only need to scroll if channel desc is too big
+        if (dLen > DESC_DISPLAY_LEN)
+          state = SCROLLING;
+        break;
+
+      case SCROLLING:
+        if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
+          ch->scrollIndex += SCROLL_CHARS;
+          // once full desc has been displayed, return to start
+          if (ch->scrollIndex + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
+            ch->scrollIndex = 0;
+            state = SCROLL_END;
+          }
+          ch->lastScrollTime = millis();
+        }
+        break;
+
+      // not really needed? can be handled in SCROLLING
+      case SCROLL_END:
+        ch->scrollIndex = 0;
+        state = SCROLL_START;
+        break;
+    }
+  }
 }
 
 void setup() {
@@ -854,8 +897,8 @@ void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(DATA_POSITION, row);
   lcd.print(rightJustify3Digits(ch->getData()));
 
-  // NAMES
-  displayChannelName(row, ch);
+  // NAMES,SCROLL
+  NAMES_SCROLL::displayChannelName(row, ch);
 }
 
 void clearChannelRow(uint8_t row) {
