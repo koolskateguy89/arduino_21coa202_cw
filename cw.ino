@@ -3,7 +3,7 @@
 #include <utility/Adafruit_MCP23017.h>
 
 #define STUDENT_ID             F("    F120840     ")
-#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,RECENT,NAMES,SCROLL")
+#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,EEPROM,RECENT,NAMES,SCROLL")
 
 #define NCOLORS  7
 #define BL_OFF 0x0
@@ -233,11 +233,6 @@ void rightPad(String &str, size_t desiredLen);
 void skipLine(Stream &s);
 
 /* extensions */
-// UDCHARS
-// void displayUpArrow(bool display);
-// void displayDownArrow(bool display);
-//void UDCHARS::displayUpArrow(bool display);
-//void UDCHARS::displayDownArrow(bool display);
 // FREERAM
 void displayFreeMemory(int row = BOTTOM_LINE);
 // EEPROM
