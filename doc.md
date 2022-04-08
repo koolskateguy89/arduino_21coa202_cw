@@ -124,7 +124,7 @@ Each channel occupies 19 bytes in the EEPROM:
 
 The beginning address for a channel is calculated using `(id - 'A') * 19`. This creates a distance of 19 bytes between each channel (A: 0, B: 19, C: 38, etc.).
 
-A channel stored in EEPROM is 'validated' by checking the ID written at the address for the channel is correct.
+A channel stored in EEPROM is 'validated' by checking the ID written at the address for the channel is correct and that the written description length does not exceed the maximum. Though this is a weak way to check that the channel was actually written and not just 'there', I couldn't think of a better way.
 
 I use the namespace `_EEPROM` for all functions relating to using the EEPROM, namely `_EEPROM::updateEEPROM(Channel*)` and `_EEPROM::readEEPROM()`.
 
@@ -132,27 +132,30 @@ I use the namespace `_EEPROM` for all functions relating to using the EEPROM, na
 
 The namespace `RECENT` contains all functions related to managing the most recent values.
 
+
 I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value.
 
-`RECENT::<unnamed>::recentHead` stores the head of the linkedlist, and can be used for all list-related operations.
+`Channel::recentHead` stores the head of the linkedlist, and can be used for all list-related operations.
 
-Another way this could be implemented is using an array `byte[64]` and keeping track of:
+Another way this could be implemented is using an array of `byte[64]` and keeping track of:
 - the index of the oldest value
-- the number of values have been entered
+- the number of values that have been entered
 
 e.g.
 
 ```c++
+typdef unsigned int uint;
+
 byte recents[64];
 unsigned int nRecents = 0;
-unsigned int oldestIndex = 0;
+uint oldestIndex = 0;
 
 void addRecent(byte val) {
   if (nRecents == 64) {
     // once max size has been reached, overwrite oldest value
     recents[oldestIndex] = val;
     oldestIndex++;
-    // loop back to start once overflowed
+    // loop back to start once past end
     oldestIndex %= 64;
   } else {
     recents[nRecents] = val;
@@ -188,13 +191,9 @@ It is implemented using a simple FSM (flowchart):
 
 ## Submission
 
-* *After following the instructions, **delete this section and ALL the subsequent sections from your report**. *
+* *After following the instructions, **delete this section and ALL the subsequent sections from your report**.*
 
-* Prepare the report as a PDF.*
-
-### From Word source
-
-If you have prepared this using the Word template then use the styles `Heading 1` and `Heading 2` for each section and subsection.  It should create a new page for each `Heading 1` and `Heading 2`.  Please check this is the case.
+* *Prepare the report as a PDF.*
 
 ### From Markdown source
 
