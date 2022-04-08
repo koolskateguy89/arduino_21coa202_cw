@@ -47,7 +47,9 @@
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
 
-//? TODO: DEBUG macro?
+// RECENT
+#define MAX_RECENT_SIZE 64
+
 
 // FREERAM, lab sheet 5
 #ifdef __arm__
@@ -121,20 +123,6 @@ typedef struct channel_s {
   byte min = 0;
   channel_s *next = nullptr;
 
-  // RECENT
-  typedef struct node_s {
-    node_s(byte val) {
-      this->val = val;
-      this->next = nullptr;
-    }
-    byte val;
-    struct node_s *next;
-  } RecentNode;
-  #define MAX_SIZE 64
-  RecentNode *recentHead = nullptr;
-  RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
-  byte recentLen = 0; // max MAX_SIZE
-
   // SCROLL
   byte scrollIndex;
   ulong lastScrollTime;
@@ -147,18 +135,29 @@ typedef struct channel_s {
     scrollState = SCROLL_START;
   }
 
-  void setData(byte value) {
-    if (data == nullptr)
-      data = new byte;
-    *data = value;
-    addRecent(value);
-  }
+  // RECENT
+  /*
+  was difficult to think of how to impl RECENT!
+  basic singly-linked-list with only tail addition (polling? is that the term)
+  but with a max size, which once reached, adding will discard head value
+  it's a Queue! FIFO
+  */
+  typedef struct node_s {
+    node_s(byte val) {
+      this->val = val;
+      this->next = nullptr;
+    }
 
-  byte getData() const {
-    return data == nullptr ? 0 : *data;
-  }
+    byte val;
+    struct node_s *next;
+  } RecentNode;
 
 private:
+  RecentNode *recentHead = nullptr;
+  RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
+  byte recentLen = 0; // max MAX_RECENT_SIZE
+
+  // RECENT
   void addRecent(byte val) {
     if (recentHead == nullptr) {
       recentHead = recentTail = new RecentNode(val);
@@ -166,9 +165,9 @@ private:
       return;
     }
 
-    // because we only care about the most recent MAX_SIZE values, we can discard (delete)
+    // because we only care about the most recent MAX_RECENT_SIZE values, we can discard (delete)
     // the oldest value, kind of like an LRU cache
-    if (recentLen == MAX_SIZE) {
+    if (recentLen == MAX_RECENT_SIZE) {
       RecentNode *oldHead = recentHead;
       recentHead = recentHead->next;
       delete oldHead;
@@ -181,8 +180,20 @@ private:
     recentLen++;
   }
 
+  // debug - to help check if recentHead gets deleted
+  bool _addedSixty = false;
+  void _addSixtyRecentsOnce() {
+    if (!_addedSixty) {
+      for (uint i = 0; i < 60; i++)
+        addRecent(random(0, 256));
+        //! RECENT::addRecentValue(random(0, 256));
+      _addedSixty = true;
+    }
+  }
+
 public:
-  byte getAverage() const {
+  // RECENT
+  byte getAverageValue() const {
     if (recentHead == nullptr)
       return 0;
 
@@ -195,6 +206,44 @@ public:
     }
 
     return round(sum / recentLen);
+  }
+
+  // debug
+  void _printAllRecent(Print &p) const {
+    p.print(F("DEBUG: "));
+    p.print(id);
+    p.print(F(" r_len="));
+    p.print(recentLen);
+    p.print(F(", ["));
+
+    if (recentHead == nullptr) {
+      p.println(']');
+      return;
+    }
+
+    p.print(recentHead->val);
+    RecentNode *node = recentHead->next;
+    while (node != nullptr) {
+      p.print(',');
+      p.print(node->val);
+      node = node->next;
+    }
+
+    p.println(']');
+  }
+
+  void setData(byte value) {
+    if (data == nullptr)
+      data = new byte;
+    *data = value;
+    // _addSixtyRecentsOnce();
+    // RECENT
+    addRecent(value);
+    _printAllRecent(Serial);
+  }
+
+  byte getData() const {
+    return data == nullptr ? 0 : *data;
   }
 
   static channel_s *headChannel;
@@ -397,7 +446,7 @@ namespace _EEPROM {
       EEPROM.update(offset, len);
 
       for (int i = 0; i < len; i++) {
-        EEPROM.update(offset + 1 + i, desc[i]);
+        EEPROM.update(offset + 1 + i, desc[ i ]);
       }
     }
 
@@ -909,10 +958,11 @@ void displayChannel(uint8_t row, Channel *ch) {
 
   // RECENT
   lcd.setCursor(RECENT_POSITION, row);
-  if (ch->data != nullptr)
-    lcd.print(rightJustify3Digits(ch->getAverage()));
-  else
-    lcd.print(F("  "));
+  if (ch->data != nullptr) {
+    lcd.print(',');
+    lcd.print(rightJustify3Digits(ch->getAverageValue()));
+  } else
+    lcd.print(F("    "));
 
   // NAMES,SCROLL
   NAMES_SCROLL::displayChannelName(row, ch);
