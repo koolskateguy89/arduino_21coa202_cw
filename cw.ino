@@ -7,6 +7,8 @@
 #define STUDENT_ID             F("    F120840     ")
 #define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,EEPROM,RECENT,NAMES,SCROLL")
 
+// change defines to const int?
+
 #define NCOLORS  7
 #define BL_OFF 0x0
 #define RED    0x1
@@ -16,6 +18,9 @@
 #define PURPLE 0x5
 #define TEAL   0x6
 #define WHITE  0x7
+
+#define UP_ARROW_POSITION   0
+#define DOWN_ARROW_POSITION 1
 
 #define SYNC_TIMEOUT   1000
 #define SELECT_TIMEOUT 1000
@@ -35,24 +40,33 @@
 #define displayTopChannel(ch)    displayChannel(TOP_LINE, ch)
 #define displayBottomChannel(ch) displayChannel(BOTTOM_LINE, ch)
 
-#define isCreateCommand(cmdId) (cmdId == 'C')
-#define isValueCommand(cmdId)  (cmdId == 'V' || cmdId == 'X' || cmdId == 'N')
-#define isOutOfRange(value)    (value < 0 || value > 255)
+#define isCreateCommand(cmdId) ((cmdId) == 'C')
+#define isValueCommand(cmdId)  ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
+#define isOutOfRange(value)    ((value) < 0 || (value) > 255)
 
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
+
+//? TODO: DEBUG macro?
+
+// FREERAM, lab sheet 5
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else // __ARM__
+extern char *__brkval;
+#endif // __arm__
 
 
 /* data types */
 typedef unsigned int uint;
 typedef unsigned long ulong;
 
-typedef enum state_e { // TODO: finish
+typedef enum { // TODO: finish
   INITIALISATION,
   SYNCHRONISATION,
   AFTER_SYNC,
   MAIN, // basically AWAITING_MESSAGE and AWAITING_PRESS
-  READING_CREATE_COMMAND,
 
   UP_PRESSED,
   DOWN_PRESSED,
@@ -62,11 +76,16 @@ typedef enum state_e { // TODO: finish
   // HCI
   HCI_LEFT, // TODO
   HCI_RIGHT, // TODO
-
-  TODO,
 } State;
 
-typedef enum scroll_state_e {
+// affect get_bottom
+typedef enum {
+  NORMAL,
+  LEFT,
+  RIGHT,
+} HciState;
+
+typedef enum {
   SCROLL_START, // scrollIndex == 0
   SCROLLING,    // scrollIndex++
   SCROLL_END,   // scrollIndex = 0
@@ -88,7 +107,6 @@ ahh I think that might be better
 // singly-linked-list, impl. similar to a TreeSet<Byte> (Java)
 // creating new channel will just insert it between 2 nodes
 // takes 21 -> ~103 bytes
-//* these don't need to be typedef'd because C++ ...
 typedef struct channel_s {
   channel_s(char id) {
     this->id = id;
@@ -103,12 +121,26 @@ typedef struct channel_s {
   byte min = 0;
   channel_s *next = nullptr;
 
+  // RECENT
+  typedef struct node_s {
+    node_s(byte val) {
+      this->val = val;
+      this->next = nullptr;
+    }
+    byte val;
+    struct node_s *next;
+  } RecentNode;
+  #define MAX_SIZE 64
+  RecentNode *recentHead = nullptr;
+  RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
+  byte recentLen = 0; // max MAX_SIZE
+
   // SCROLL
   byte scrollIndex;
   ulong lastScrollTime;
   ScrollState scrollState;
 
-  void setDescription(const String desc) {
+  void setDescription(String desc) {
     description = desc;
     // SCROLL, reset scrolling
     scrollIndex = lastScrollTime = 0;
@@ -119,15 +151,55 @@ typedef struct channel_s {
     if (data == nullptr)
       data = new byte;
     *data = value;
+    addRecent(value);
   }
 
-  byte getData() {
+  byte getData() const {
     return data == nullptr ? 0 : *data;
+  }
+
+private:
+  void addRecent(byte val) {
+    if (recentHead == nullptr) {
+      recentHead = recentTail = new RecentNode(val);
+      recentLen = 1;
+      return;
+    }
+
+    // because we only care about the most recent MAX_SIZE values, we can discard (delete)
+    // the oldest value, kind of like an LRU cache
+    if (recentLen == MAX_SIZE) {
+      RecentNode *oldHead = recentHead;
+      recentHead = recentHead->next;
+      delete oldHead;
+      recentLen--;
+    }
+
+    RecentNode *node = new RecentNode(val);
+    recentTail->next = node;
+    recentTail = node;
+    recentLen++;
+  }
+
+public:
+  byte getAverage() const {
+    if (recentHead == nullptr)
+      return 0;
+
+    uint sum = recentHead->val;
+    RecentNode *node = recentHead->next;
+
+    while (node != nullptr) {
+      sum += node->val;
+      node = node->next;
+    }
+
+    return round(sum / recentLen);
   }
 
   static channel_s *headChannel;
 
-  static channel_s *create(char id, const String description);
+  static channel_s *create(char id, String description);
   static channel_s *channelForId(char id);
   static channel_s *channelBefore(const channel_s *ch);
   static channel_s *getBottom(const channel_s *topChannel);
@@ -161,7 +233,7 @@ void Channel::insertChannel(Channel *ch) {
 }
 
 // create new channel if not already created, else use new description
-Channel *Channel::create(char id, const String description) {
+Channel *Channel::create(char id, String description) {
   Channel *ch = Channel::channelForId(id);
 
   if (ch == nullptr) {
@@ -192,7 +264,9 @@ Channel *Channel::channelBefore(const Channel *ch) {
   if (ch == headChannel)
     return nullptr;
 
-  Channel *node = headChannel;
+  return channelForId(ch -> id - 1);
+  //! FIXME
+  /*Channel *node = headChannel;
 
   while (node->next != nullptr) {
     if (node->next == ch)
@@ -200,7 +274,7 @@ Channel *Channel::channelBefore(const Channel *ch) {
     node = node->next;
   }
 
-  return nullptr;
+  return nullptr;*/
 }
 
 Channel *Channel::getBottom(const Channel *topChannel) {
@@ -217,6 +291,7 @@ bool Channel::canGoDown(const Channel *topChannel) {
 
 /* function prototypes */
 // main (is that gonna be state name?)
+void handleSerialInput(Channel **topChannelPtr);
 // reading commands (main)
 void readCreateCommand(Channel **topChannel);
 void readValueCommand(char cmdId);
@@ -237,45 +312,39 @@ void skipLine(Stream &s);
 
 /* globals */
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-// Channel *headChannel = nullptr;
 Channel *&headChannel = Channel::headChannel;
 
 
+/* extensions */
+
+/*
+ * Arrows are 2 chevrons
+ */
 namespace UDCHARS {
   void displayUpArrow(bool display);
   void displayDownArrow(bool display);
 
   void displayUpArrow(bool display) {
-    uint8_t ch = ' ';
-    if (display) {
-      byte upChevron[] = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
-      lcd.createChar(ch = 0, upChevron);
-    }
+    uint8_t ch = display ? UP_ARROW_POSITION : ' ';
     lcd.setCursor(ARROW_POSITION, TOP_LINE);
     lcd.write(ch);
   }
 
   void displayDownArrow(bool display) {
-    uint8_t ch = ' ';
-    if (display) {
-      byte downChevron[] = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
-      lcd.createChar(ch = 1, downChevron);
-    }
+    uint8_t ch = display ? DOWN_ARROW_POSITION : ' ';
     lcd.setCursor(ARROW_POSITION, BOTTOM_LINE);
     lcd.write(ch);
   }
 }
 
-#ifdef __arm__
-// should use uinstd.h to define sbrk but Due causes a conflict
-extern "C" char* sbrk(int incr);
-#else // __ARM__
-extern char *__brkval;
-#endif // __arm__
+/*
+ * Displayed on the bottom line of the select display
+ */
 namespace FREERAM {
   void displayFreeMemory(int row = BOTTOM_LINE);
 
-  namespace { // private
+  namespace { // 'private', helper methods
+    // lab sheet 5
     uint freeMemory() {
       char top;
       #ifdef __arm__
@@ -289,18 +358,20 @@ namespace FREERAM {
   }
 
   void displayFreeMemory(int row) {
-    lcd.setCursor(0, row);
+    lcd.setCursor(1, row);
     lcd.print(F("Free bytes:"));
     lcd.print(freeMemory());
   }
 }
 
+/*
+? maybe change topChannel to channel ID (char)
+*/
 namespace HCI {
   // TODO
 }
 
 /*
- * _ to avoid any name conflicts
  *
  * Each channel occupies 19 bytes in EEPROM:
  * 1 id
@@ -416,6 +487,7 @@ namespace _EEPROM {
 // was difficult to think of how to impl RECENT!
 // basic singly-linked-list with only tail addition (polling? is that the term)
 // but with a max size, which once reached, adding will discard head value
+// it's a Queue! FIFO
 namespace RECENT {
   #define MAX_SIZE 64
 
@@ -443,7 +515,7 @@ namespace RECENT {
     RecentNode *recentHead = nullptr;
     RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
 
-    size_t _recentLen = 0;
+    size_t _recentLen = 0; // max 64
 
     // could use a running sum to make this O(1)
     uint calculateAverage() { // O(n)
@@ -461,13 +533,13 @@ namespace RECENT {
       return round(sum / _recentLen);
     }
 
-    // debug - to check if recentHead gets deleted
+    // debug - to help check if recentHead gets deleted
     void _addSixtyOnce() {
       static bool done = false;
 
       if (!done) {
-        for (byte i = 0; i < 60; i++)
-          RECENT::addRecentValue(random(0, 256));
+        for (uint i = 0; i < 60; i++)
+          //! RECENT::addRecentValue(random(0, 256));
         done = true;
       }
     }
@@ -493,7 +565,6 @@ namespace RECENT {
 
       p.println(F("DEBUG: ]"));
     }
-
   }
 
   void addRecentValue(byte val) {  // O(1)
@@ -518,7 +589,7 @@ namespace RECENT {
     _recentLen++;
   }
 
-  void _displayMostRecentValue(int row, bool display) { // O(1)
+  void _displayMostRecentValue(int row, bool display) {
     display &= recentTail != nullptr;
 
     lcd.setCursor(RECENT_POSITION, row);
@@ -540,16 +611,20 @@ namespace RECENT {
 }
 
 // NAMES and SCROLL together, it makes sense
+/*
+ * [currently] Uses a FSM to manage scrolling state, uses Channel variables
+ * scrollState, scrollIndex & lastScrollTime.
+ */
 namespace NAMES_SCROLL {
-  #define SCROLL_CHARS      2
-  #define SCROLL_TIMEOUT    1000
+  #define SCROLL_CHARS      1 //2
+  #define SCROLL_TIMEOUT    500 //1000
   #define DESC_DISPLAY_LEN  6
 
   void displayChannelName(int row, Channel *ch);
 
   void displayChannelName(int row, Channel *ch) {
     const uint dLen = ch->description.length();
-    const byte si = ch->scrollIndex;
+    byte &si = ch->scrollIndex;
 
     lcd.setCursor(DESC_POSITION, row);
     String textToDisplay = ch->description.substring(si, min(dLen, si + DESC_DISPLAY_LEN));
@@ -561,7 +636,21 @@ namespace NAMES_SCROLL {
     // SCROLL
     /*
     tbh this could just be a bunch of ifs, it's not really a state
+    its more like a flowchart ish
     */
+
+    /*if (si + DESC_DISPLAY_LEN > dLen + 1) { // end
+      // +1 to make even lengths work (because of 'trailing' char)
+      // once full desc has been displayed, return to start
+      si = 0;
+    } else { // start/scrolling
+      // only need to scroll if channel desc is too big
+      if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
+        si += SCROLL_CHARS;
+        ch->lastScrollTime = millis();
+      }
+    }*/
+
     switch (state) {
       // not really a state
       case SCROLL_START:
@@ -595,23 +684,25 @@ void setup() {
   Serial.begin(9600);
   lcd.begin(16, 2);
   lcd.clear();
+
+  // UDCHARS
+  byte upChevron[] = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
+  lcd.createChar(UP_ARROW_POSITION, upChevron);
+  byte downChevron[] = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
+  lcd.createChar(DOWN_ARROW_POSITION, downChevron);
 }
 
 void loop() {
   static State state = INITIALISATION;
-  static Channel *topChannel; // btmChannel = topChannel->next
+  static Channel *topChannel; // btmChannel ~= topChannel->next
   static ulong selectPressTime;
 
   uint8_t b;
 
   switch (state) {
   case INITIALISATION:
+    topChannel = headChannel = nullptr;
     selectPressTime = 0;
-
-    // EEPROM
-    topChannel = headChannel = _EEPROM::readEEPROM();
-    _printChannelsFull(Serial, topChannel);
-
     state = SYNCHRONISATION;
     break;
 
@@ -631,11 +722,16 @@ void loop() {
 
   case AFTER_SYNC:
     Serial.println(IMPLEMENTED_EXTENSIONS);
+
+    // EEPROM
+    topChannel = headChannel = _EEPROM::readEEPROM();
+    Serial.println(F("DEBUG: Channels stored in EEPROM:"));
+    _printChannelsFull(Serial, topChannel);
+
     state = MAIN;
     break;
 
   case MAIN: // basically AWAITING_PRESS & AWAITING_MESSAGE
-    updateDisplay(topChannel);
     b = lcd.readButtons();
 
     if (b & BUTTON_SELECT) {
@@ -645,44 +741,40 @@ void loop() {
       break;
     } else if (b & BUTTON_UP) {
       Serial.println(F("DEBUG: Up pressed"));
+      if (Channel::canGoUp(topChannel))
+        topChannel = Channel::channelBefore(topChannel);
       state = UP_PRESSED;
       break;
     } else if (b & BUTTON_DOWN) {
       Serial.println(F("DEBUG: Down pressed"));
+      if (Channel::canGoDown(topChannel))
+        topChannel = topChannel->next;
       state = DOWN_PRESSED;
       break;
-    } // TODO: button_left & button_right
+    } else if (b & BUTTON_LEFT) {
 
-    if (Serial.available()) {
-      char cmdId = Serial.read();
+    } else if (b & BUTTON_RIGHT) {
 
-      if (isCreateCommand(cmdId))
-        readCreateCommand(&topChannel);
-      else if (isValueCommand(cmdId))
-        readValueCommand(cmdId);
-      else
-        skipLine(Serial);
     }
+    // TODO: button_left & button_right
 
+    handleSerialInput(&topChannel);
+
+    updateDisplay(topChannel);
     break;
 
-  // may not need to be a state? cos really its not (but left/right are)
-  //? make into a func?
+  // wait until up is released
   case UP_PRESSED:
-    if (Channel::canGoUp(topChannel))
-      topChannel = Channel::channelBefore(topChannel);
-    state = MAIN;
+    if (!(lcd.readButtons() & BUTTON_UP))
+      state = MAIN;
     break;
 
-  // may not need to be a state? cos really its not
-  //? make into a func?
+  // wait until down is released
   case DOWN_PRESSED:
-    if (Channel::canGoDown(topChannel))
-      topChannel = topChannel->next;
-    state = MAIN;
+    if (!(lcd.readButtons() & BUTTON_DOWN))
+      state = MAIN;
     break;
 
-  //! TODO: refactor so handle Serial input
   case SELECT_IS_HELD:  // select is currently being held, waiting to reach 1 second
     // if select has been held for 1 second
     if (millis() - selectPressTime >= SELECT_TIMEOUT) {
@@ -702,10 +794,9 @@ void loop() {
     }
     break;
 
-  //! TODO: refactor so handle Serial input
   //* maybe make a SelectState
   //* or DisplayState - I think this makes more sense (NORMAL, SELECT)
-  case SELECT_AWAITING_RELEASE:  // select is currently being held (has already been held for 1+ second
+  case SELECT_AWAITING_RELEASE:  // select is currently being held (has already been held for 1+ second)
     Serial.println(F("DEBUG: Awaiting SELECT release"));
     // if SELECT has been released
     if (!(lcd.readButtons() & BUTTON_SELECT)) {
@@ -714,28 +805,222 @@ void loop() {
       //? might need to store like a sub-state if main is its own FSM?
       state = MAIN;
     }
-    break;
 
-  case TODO:
-    /*
-    static int i = 0;
-    static char id = 'A';
-    static bool top = true;
-
-    Channel &ch = channels[i];
-    ch.data = random(256);
-    displayChannel(top ? 0 : 1, ch);
-    // lcd.setBacklight(i % 7);
-    lcd.setBacklight(random(8));
-    delay(800);
-
-    ++i %= 26;
-    top = !top;
-    */
-    lcd.setBacklight(YELLOW);
+    handleSerialInput(&topChannel);
     break;
   }
 }
+
+void handleSerialInput(Channel **topChannelPtr) {
+  if (!Serial.available())
+    return;
+
+  char cmdId = Serial.read();
+
+  if (isCreateCommand(cmdId))
+    readCreateCommand(topChannelPtr);
+  else if (isValueCommand(cmdId))
+    readValueCommand(cmdId);
+  else
+    skipLine(Serial);
+}
+
+/* reading commands */
+
+void readCreateCommand(Channel **topChannelPtr) {
+  String cmd = Serial.readStringUntil('\n');
+
+  uint cmdLen = cmd.length();
+  if (cmdLen < 2 || !isUpperCase(cmd[ 0 ])) {
+    messageError('C', cmd);
+    return;
+  }
+
+  char channelId = cmd[ 0 ];
+  String description = cmd.substring(1, min(cmdLen, 1 + MAX_DESC_LENGTH));
+
+  Channel *ch = Channel::create(channelId, description);
+
+  // if creating first channel
+  if (*topChannelPtr == nullptr) {
+    Serial.println(F("DEBUG: FIRST CHANNEL MADE"));
+    *topChannelPtr = ch;
+  }
+
+  _EEPROM::updateEEPROM(ch);
+}
+
+void readValueCommand(char cmdId) {
+  String cmd = Serial.readStringUntil('\n');
+
+  uint cmdLen = cmd.length();
+  if (cmdLen < 2 || cmdLen > 4) {
+    messageError(cmdId, cmd);
+    return;
+  }
+
+  char channelId = cmd[ 0 ];
+  String valueS = cmd.substring(1);
+  long value = valueS.toInt();
+
+  if (!isUpperCase(channelId)
+      || (value == 0 && valueS != "0") // input wasn't numeric
+      || isOutOfRange(value)
+     ) {
+    messageError(cmdId, cmd);
+    return;
+  }
+
+  Channel *ch = Channel::channelForId(channelId);
+  // if channel hasn't been created, don't do anything
+  if (ch == nullptr)
+    return;
+
+  switch (cmdId) {
+    case 'V':
+      //! RECENT::addRecentValue(value);
+      ch->setData(value);
+      break;
+    case 'X':
+      ch->max = value;
+      break;
+    case 'N':
+      ch->min = value;
+      break;
+  }
+
+  _EEPROM::updateEEPROM(ch);
+}
+
+//? TODO make into macro?
+void messageError(char cmdId, const String &cmd) {
+  Serial.print(F("ERROR: "));
+  Serial.print(cmdId);
+  Serial.println(cmd);
+}
+
+/* display */
+
+void displayChannel(uint8_t row, Channel *ch) {
+  lcd.setCursor(ID_POSITION, row);
+  lcd.print(ch->id);
+  lcd.setCursor(DATA_POSITION, row);
+  lcd.print(rightJustify3Digits(ch->getData()));
+
+  // RECENT
+  lcd.setCursor(RECENT_POSITION, row);
+  if (ch->data != nullptr)
+    lcd.print(rightJustify3Digits(ch->getAverage()));
+  else
+    lcd.print(F("  "));
+
+  // NAMES,SCROLL
+  NAMES_SCROLL::displayChannelName(row, ch);
+}
+
+void clearChannelRow(uint8_t row) {
+  lcd.setCursor(ID_POSITION, row);
+  lcd.print(F("    "));
+}
+
+void updateDisplay(Channel *const topChannel) {
+  updateBacklight();
+
+  // UDCHARS,HCI
+  UDCHARS::displayUpArrow(Channel::canGoUp(topChannel));
+  UDCHARS::displayDownArrow(Channel::canGoDown(topChannel));
+
+  if (topChannel != nullptr) {
+    displayTopChannel(topChannel);
+  } else {
+    clearChannelRow(TOP_LINE);
+  }
+
+  Channel *const btmChannel = Channel::getBottom(topChannel);
+  if (btmChannel != nullptr) {
+    displayBottomChannel(btmChannel);
+  } else {
+    clearChannelRow(BOTTOM_LINE);
+  }
+
+  // RECENT
+  //! RECENT::displayAverage(/*TOP_LINE, */topChannel != nullptr);
+  //! RECENT::displayMostRecentValue(/*BOTTOM_LINE, */btmChannel != nullptr);
+}
+
+/*
+- All values in every channel in range: white
+- Any number above max: red
+- Any number below min: green
+- If both: yellow
+*/
+void updateBacklight() {
+  // take advantage of the fact that YELLOW == RED | GREEN
+  uint color = 0;
+
+  Channel *ch = headChannel;
+
+  while (ch != nullptr) {
+    // ignore channel if its value hasn't been set by a command
+    if (ch->data == nullptr) {
+      ch = ch->next;
+      continue;
+    }
+
+    if (ch->getData() > ch->max)
+      color |= RED;
+    else if (ch->min <= ch->max && ch->getData() < ch->min)
+      color |= GREEN;
+
+    // early exit, already reached 'worst case'
+    if (color == YELLOW)
+      break;
+
+    ch = ch->next;
+  }
+
+  color = color == 0 ? WHITE : color;
+  lcd.setBacklight(color);
+}
+
+void selectDisplay() {
+  lcd.setBacklight(PURPLE);
+
+  lcd.setCursor(TOP_CURSOR);
+  lcd.print(STUDENT_ID);
+
+  // FREERAM
+  FREERAM::displayFreeMemory();
+}
+
+/* Utility functions */
+
+namespace Utils {
+
+}
+
+String rightJustify3Digits(uint num) {
+  if (num >= 100)
+    return String(num);
+
+  String prefix = (num >= 10) ? F(" ") : F("  ");
+  prefix.concat(num);
+  return prefix;
+}
+
+// pad spaces to the right of given string, to help overwrite old values
+void rightPad(String &str, size_t desiredLen) {
+  int diff = desiredLen - str.length();
+  while (diff > 0) {
+    str.concat(' ');
+    diff--;
+  }
+}
+
+void skipLine(Stream &s) {
+  s.find('\n');
+}
+
 
 // debug
 void _printChannels(Print &p) {
@@ -818,186 +1103,4 @@ void _printChannelsFull(Print &p, Channel* head) {
   }
 
   p.println(F("DEBUG: ]"));
-}
-
-
-/* reading commands */
-
-void readCreateCommand(Channel **topChannel) {
-  String cmd = Serial.readStringUntil('\n');
-
-  uint cmdLen = cmd.length();
-  if (cmdLen < 2 || !isUpperCase(cmd[ 0 ])) {
-    messageError('C', cmd);
-    return;
-  }
-
-  char channelId = cmd[ 0 ];
-  String description = cmd.substring(1, min(cmdLen, 1 + MAX_DESC_LENGTH));
-
-  Channel *ch = Channel::create(channelId, description);
-
-  // if creating first channel
-  if (*topChannel == nullptr) {
-    Serial.println(F("DEBUG: FIRST CHANNEL MADE"));
-    *topChannel = ch;
-  }
-
-  _EEPROM::updateEEPROM(ch);
-}
-
-void readValueCommand(char cmdId) {
-  String cmd = Serial.readStringUntil('\n');
-
-  uint cmdLen = cmd.length();
-  if (cmdLen < 2 || cmdLen > 4) {
-    messageError(cmdId, cmd);
-    return;
-  }
-
-  char channelId = cmd[ 0 ];
-  String valueS = cmd.substring(1);
-  long value = valueS.toInt();
-
-  if (!isUpperCase(channelId)
-      || (value == 0 && valueS != "0") // input wasn't numeric
-      || isOutOfRange(value)
-     ) {
-    messageError(cmdId, cmd);
-    return;
-  }
-
-  Channel *ch = Channel::channelForId(channelId);
-  // if channel hasn't been created, don't do anything
-  if (ch == nullptr)
-    return;
-
-  if (cmdId == 'V') {
-    RECENT::addRecentValue(value);
-    ch->setData(value);
-  } else if (cmdId == 'X')
-    ch->max = value;
-  else
-    ch->min = value;
-
-  _EEPROM::updateEEPROM(ch);
-}
-
-void messageError(char cmdId, const String &cmd) {
-  Serial.print(F("ERROR: "));
-  Serial.print(cmdId);
-  Serial.println(cmd);
-}
-
-/* display */
-
-void displayChannel(uint8_t row, Channel *ch) {
-  lcd.setCursor(ID_POSITION, row);
-  lcd.print(ch->id);
-  lcd.setCursor(DATA_POSITION, row);
-  lcd.print(rightJustify3Digits(ch->getData()));
-
-  // NAMES,SCROLL
-  NAMES_SCROLL::displayChannelName(row, ch);
-}
-
-void clearChannelRow(uint8_t row) {
-  lcd.setCursor(ID_POSITION, row);
-  lcd.print(F("    "));
-}
-
-void updateDisplay(Channel *const topChannel) {
-  updateBacklight();
-
-  // UDCHARS,HCI
-  UDCHARS::displayUpArrow(Channel::canGoUp(topChannel));
-  UDCHARS::displayDownArrow(Channel::canGoDown(topChannel));
-
-  if (topChannel != nullptr) {
-    displayTopChannel(topChannel);
-  } else {
-    clearChannelRow(TOP_LINE);
-  }
-
-  Channel *const btmChannel = Channel::getBottom(topChannel);
-  if (btmChannel != nullptr) {
-    displayBottomChannel(btmChannel);
-  } else {
-    clearChannelRow(BOTTOM_LINE);
-  }
-
-  // RECENT
-  RECENT::displayAverage(/*TOP_LINE, */topChannel != nullptr);
-  RECENT::displayMostRecentValue(/*BOTTOM_LINE, */btmChannel != nullptr);
-}
-
-/*
-- All values in every channel in range: white
-- Any number above max: red
-- Any number below min: green
-- If both: yellow
-*/
-void updateBacklight() {
-  // take advantage of the fact that YELLOW == RED | GREEN
-  uint color = 0;
-
-  Channel *ch = headChannel;
-
-  while (ch != nullptr) {
-    // ignore channel if its value hasn't been set by a command
-    if (ch->data == nullptr) {
-      ch = ch->next;
-      continue;
-    }
-
-    if (ch->getData() > ch->max)
-      color |= RED;
-    else if (ch->getData() < ch->min)
-      color |= GREEN;
-
-    // early exit, already reached worst case
-    if (color == YELLOW)
-      break;
-
-    ch = ch->next;
-  }
-
-  color = color == 0 ? WHITE : color;
-  lcd.setBacklight(color);
-}
-
-void selectDisplay() {
-  lcd.setBacklight(PURPLE);
-
-  lcd.setCursor(TOP_CURSOR);
-  lcd.print(STUDENT_ID);
-
-  // FREERAM
-  FREERAM::displayFreeMemory();
-}
-
-/* Utility functions */
-
-String rightJustify3Digits(uint num) {
-  if (num >= 100)
-    return String(num);
-
-  String prefix = (num >= 10) ? F(" ") : F("  ");
-  prefix.concat(num);
-  return prefix;
-}
-
-// pad spaces to the right of given string, to help overwrite old values
-void rightPad(String &str, size_t desiredLen) {
-  int diff = desiredLen - str.length();
-  while (diff > 0) {
-    str.concat(' ');
-    diff--;
-  }
-}
-
-//! may not use
-void skipLine(Stream &s) {
-  s.flush();
-  s.find('\n');
 }
