@@ -47,13 +47,15 @@ Channels are implemented as an ordered singly-linked-list (ordered by channel ID
 | --- | --- | --- |
 | char | id | The channel's ID (A-Z) |
 | String | description | The channel's description/name/title (max. 15 chars) |
-| byte* | data | Pointer to the channel's data (value) |
 | byte | max | The channel's maximum |
 | byte | min | The channel's minimum |
 | channel_s* | next | Pointer to the next created channel |
 | byte | scrollIndex | SCROLL: the start index of the currently displayed description |;
 | ulong | lastScrollTime | SCROLL: the time the description was last scrolled |;
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
+| RecentNode* | recentHead | The head of the RECENT linked list |
+| RecentNode* | recentTail | The tail of the RECENT linked list |
+| byte | recentLen | The number of recent values currently stored. |
 
 The head of this linked list is stored statically in `Channel::headChannel` and globally (as a reference) in `headChannel`. When a new channel is created using `Channel::create`, the linked list is updated using `Channel::insertChannel`, which will insert the new channel into the appropriate position, according to the channel's ID.
 
