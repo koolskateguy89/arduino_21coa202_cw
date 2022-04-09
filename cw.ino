@@ -117,8 +117,7 @@ typedef struct channel_s {
 
   char id;
   String description;
-  // EEPROM, use pointer to be able to check if channel's value has been set
-  byte *data = nullptr;
+  // channel data/value can be gotten using recentTail->val
   byte max = 255;
   byte min = 0;
   channel_s *next = nullptr;
@@ -133,6 +132,10 @@ typedef struct channel_s {
     // SCROLL, reset scrolling
     scrollIndex = lastScrollTime = 0;
     scrollState = SCROLL_START;
+  }
+
+  bool valueHasBeenSet() const {
+    return recentTail != nullptr;
   }
 
   // RECENT
@@ -154,7 +157,7 @@ typedef struct channel_s {
 
 private:
   RecentNode *recentHead = nullptr;
-  RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
+  RecentNode *recentTail = nullptr;
   byte recentLen = 0; // max MAX_RECENT_SIZE
 
   // RECENT
@@ -233,17 +236,12 @@ public:
   }
 
   void setData(byte value) {
-    if (data == nullptr)
-      data = new byte;
-    *data = value;
-    // _addSixtyRecentsOnce();
-    // RECENT
     addRecent(value);
     _printAllRecent(Serial);
   }
 
   byte getData() const {
-    return data == nullptr ? 0 : *data;
+    return recentTail == nullptr ? 0 : recentTail->val;
   }
 
   static channel_s *headChannel;
@@ -958,7 +956,7 @@ void displayChannel(uint8_t row, Channel *ch) {
 
   // RECENT
   lcd.setCursor(RECENT_POSITION, row);
-  if (ch->data != nullptr) {
+  if (ch->valueHasBeenSet()) {
     lcd.print(',');
     lcd.print(rightJustify3Digits(ch->getAverageValue()));
   } else
@@ -1012,7 +1010,7 @@ void updateBacklight() {
 
   while (ch != nullptr) {
     // ignore channel if its value hasn't been set by a command
-    if (ch->data == nullptr) {
+    if (!ch->valueHasBeenSet()) {
       ch = ch->next;
       continue;
     }
