@@ -311,9 +311,7 @@ Channel *Channel::channelBefore(const Channel *ch) {
   if (ch == headChannel)
     return nullptr;
 
-  return channelForId(ch -> id - 1);
-  //! FIXME
-  /*Channel *node = headChannel;
+  Channel *node = headChannel;
 
   while (node->next != nullptr) {
     if (node->next == ch)
@@ -321,7 +319,7 @@ Channel *Channel::channelBefore(const Channel *ch) {
     node = node->next;
   }
 
-  return nullptr;*/
+  return nullptr;
 }
 
 Channel *Channel::getBottom(const Channel *topChannel) {
@@ -535,6 +533,7 @@ namespace _EEPROM {
 // basic singly-linked-list with only tail addition (polling? is that the term)
 // but with a max size, which once reached, adding will discard head value
 // it's a Queue! FIFO
+//! no longer used
 namespace RECENT {
   #define MAX_SIZE 64
 
@@ -586,7 +585,7 @@ namespace RECENT {
 
       if (!done) {
         for (uint i = 0; i < 60; i++)
-          //! RECENT::addRecentValue(random(0, 256));
+          RECENT::addRecentValue(random(0, 256));
         done = true;
       }
     }
