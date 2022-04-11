@@ -19,8 +19,8 @@
 #define TEAL   0x6
 #define WHITE  0x7
 
-#define UP_ARROW_POSITION   0
-#define DOWN_ARROW_POSITION 1
+#define UP_ARROW_CHAR   0
+#define DOWN_ARROW_CHAR 1
 
 #define SYNC_TIMEOUT   1000
 #define SELECT_TIMEOUT 1000
@@ -110,13 +110,22 @@ ahh I think that might be better
 // creating new channel will just insert it between 2 nodes
 // takes 21 -> ~103 bytes
 typedef struct channel_s {
-  channel_s(char id) {
+  /*channel_s(char id) {
+    //!
     this->id = id;
     this->setDescription("");
+    this->setDescription("", 0);
+  }*/
+  channel_s(char id, const char *desc, byte descLen) {
+    this->id = id;
+    this->setDescription(desc, descLen);
   }
 
   char id;
-  String description;
+  //! String description;
+  const char *desc = nullptr;
+  byte descLen;
+
   // channel data/value can be gotten using recentTail->val
   byte max = 255;
   byte min = 0;
@@ -127,8 +136,19 @@ typedef struct channel_s {
   ulong lastScrollTime;
   ScrollState scrollState;
 
-  void setDescription(String desc) {
+  /*void setDescription(String desc) {
+    //!
     description = desc;
+    // SCROLL, reset scrolling
+    scrollIndex = lastScrollTime = 0;
+    scrollState = SCROLL_START;
+  }*/
+
+  void setDescription(const char *desc, byte descLen) {
+    if (this->desc != nullptr)
+      free((char*) this->desc);
+    this->desc = desc;
+    this->descLen = descLen;
     // SCROLL, reset scrolling
     scrollIndex = lastScrollTime = 0;
     scrollState = SCROLL_START;
@@ -145,6 +165,7 @@ typedef struct channel_s {
   but with a max size, which once reached, adding will discard head value
   it's a Queue! FIFO
   */
+private:
   typedef struct node_s {
     node_s(byte val) {
       this->val = val;
@@ -155,7 +176,6 @@ typedef struct channel_s {
     struct node_s *next;
   } RecentNode;
 
-private:
   RecentNode *recentHead = nullptr;
   RecentNode *recentTail = nullptr;
   byte recentLen = 0; // max MAX_RECENT_SIZE
@@ -246,7 +266,9 @@ public:
 
   static channel_s *headChannel;
 
-  static channel_s *create(char id, String description);
+  // these methods assume provided ID is valid (A-Z)
+  //static channel_s *create(char id, String description);
+  static channel_s *create(char id, const char *desc, byte descLen);
   static channel_s *channelForId(char id);
   static channel_s *channelBefore(const channel_s *ch);
   static channel_s *getBottom(const channel_s *topChannel);
@@ -280,6 +302,8 @@ void Channel::insertChannel(Channel *ch) {
 }
 
 // create new channel if not already created, else use new description
+/*
+//!
 Channel *Channel::create(char id, String description) {
   Channel *ch = Channel::channelForId(id);
 
@@ -292,6 +316,23 @@ Channel *Channel::create(char id, String description) {
   }
 
   ch->setDescription(description);
+  return ch;
+}
+*/
+
+// create new channel if not already created, else use new description
+Channel *Channel::create(char id, const char *desc, byte descLen) {
+  Channel *ch = Channel::channelForId(id);
+
+  if (ch == nullptr) {
+    Serial.print(F("DEBUG: Making new channel with id "));
+    Serial.println(id);
+    // shouldn't free/delete because 'all channels will be used'
+    ch = new Channel(id, desc, descLen);
+    insertChannel(ch);
+  } else
+    ch->setDescription(desc, descLen);
+
   return ch;
 }
 
@@ -351,8 +392,10 @@ void updateBacklight();
 void selectDisplay();
 // utils
 String rightJustify3Digits(uint num);
-void rightPad(String &str, size_t desiredLen);
+// void rightPad(String &str, size_t desiredLen);
+void rightPad(char *str, size_t currentLen, size_t desiredLen);
 void skipLine(Stream &s);
+void substr(char *dest, const char *src, size_t start, size_t len);
 
 
 /* globals */
@@ -370,13 +413,13 @@ namespace UDCHARS {
   void displayDownArrow(bool display);
 
   void displayUpArrow(bool display) {
-    uint8_t ch = display ? UP_ARROW_POSITION : ' ';
+    uint8_t ch = display ? UP_ARROW_CHAR : ' ';
     lcd.setCursor(ARROW_POSITION, TOP_LINE);
     lcd.write(ch);
   }
 
   void displayDownArrow(bool display) {
-    uint8_t ch = display ? DOWN_ARROW_POSITION : ' ';
+    uint8_t ch = display ? DOWN_ARROW_CHAR : ' ';
     lcd.setCursor(ARROW_POSITION, BOTTOM_LINE);
     lcd.write(ch);
   }
@@ -437,7 +480,9 @@ namespace _EEPROM {
   Channel *readEEPROM();
 
   namespace {
+    /*
     void writeString(int offset, const String &desc) {
+      //!
       const byte len = desc.length();
       EEPROM.update(offset, len);
 
@@ -445,9 +490,22 @@ namespace _EEPROM {
         EEPROM.update(offset + 1 + i, desc[ i ]);
       }
     }
+    */
+
+    void writeString(int offset, const char *desc, byte len) {
+      EEPROM.update(offset, len);
+      eeprom_update_block(desc, (void*) (offset + 1), len);
+    }
+
+    void readString(int offset, char *desc, byte len) {
+      eeprom_read_block(desc, (void*) offset, len);
+      desc[len] = '\0';
+    }
 
     // returns whether the length is valid or not
+    /*
     bool readString(int offset, String &desc) {
+      //!
       const byte len = EEPROM[ offset ];
       if (len > MAX_DESC_LENGTH)
         return false;
@@ -458,19 +516,34 @@ namespace _EEPROM {
 
       return true;
     }
+    */
 
-    Channel *readChannel(uint addr, char id) {
-      String desc;
-      // if the stored description isn't valid
-      if (!readString(descOffset(addr), desc))
+    Channel *readChannel(char id) {
+      const uint idAddr = addressForId(id);
+
+      // basic verification
+      if (EEPROM[ idAddr ] != id)
         return nullptr;
 
-      byte max = EEPROM[ maxOffset(addr) ];
+      byte descLen =  EEPROM[ descOffset(idAddr) ];
+      // if the stored description isn't valid
+      if (descLen == 0 || descLen > MAX_DESC_LENGTH)
+        return nullptr;
 
-      byte min = EEPROM[ minOffset(addr) ];
+      char *desc = (char*) malloc((1 + descLen) * sizeof(*desc));
+      readString(descOffset(idAddr) + 1, desc, descLen);
 
-      Channel *ch = new Channel(id);
-      ch->setDescription(desc);
+      //!String desc;
+      // if the stored description isn't valid
+      //if (!readString(descOffset(idAddr), desc))
+        //return nullptr;
+
+      byte max = EEPROM[ maxOffset(idAddr) ];
+
+      byte min = EEPROM[ minOffset(idAddr) ];
+
+      Channel *ch = new Channel(id, desc, descLen);
+      // ! ch->setDescription(desc);
       ch->max = max;
       ch->min = min;
 
@@ -478,7 +551,9 @@ namespace _EEPROM {
     }
   }
 
+  /*
   void updateEEPROM(const Channel *ch) {
+    //!
     if (ch == nullptr)
      return;
 
@@ -490,6 +565,20 @@ namespace _EEPROM {
 
     writeString(descOffset(addr), ch->description);
   }
+  */
+
+  void updateEEPROM(const Channel *ch) {
+    if (ch == nullptr)
+     return;
+
+    uint addr = addressForId(ch->id);
+
+    EEPROM.update(addr, ch->id);
+    EEPROM.update(maxOffset(addr), ch->max);
+    EEPROM.update(minOffset(addr), ch->min);
+
+    writeString(descOffset(addr), ch->desc, ch->descLen);
+  }
 
   // returns the head channel
   Channel *readEEPROM() {
@@ -497,14 +586,7 @@ namespace _EEPROM {
     Channel *tail = nullptr;
 
     for (char id = 'A'; id <= 'Z'; id++) {
-      uint addr = addressForId(id);
-
-      // basic verification
-      byte readId = EEPROM.read(addr);
-      if (readId != id)
-        continue;
-
-      Channel *ch = readChannel(addr, id);
+      Channel *ch = readChannel(id);
 
       if (head == nullptr) {
         head = tail = ch;
@@ -517,11 +599,12 @@ namespace _EEPROM {
     return head;
   }
 
-  // will cause reading that id to return nullptr
+  // debug - will cause reading that id to return nullptr
   void invalidate(char id) {
     EEPROM.update(addressForId(id), 0);
   }
 
+  // debug
   void invalidateAll() {
     for (char id = 'A'; id <= 'Z'; id++)
       EEPROM.update(addressForId(id), 0);
@@ -668,10 +751,13 @@ namespace NAMES_SCROLL {
 
   void displayChannelName(int row, Channel *ch);
 
+  /*
   void displayChannelName(int row, Channel *ch) {
-    const uint dLen = ch->description.length();
+    //!
+    const byte dLen = ch->description.length();
     byte &si = ch->scrollIndex;
 
+    // NAMES
     lcd.setCursor(DESC_POSITION, row);
     String textToDisplay = ch->description.substring(si, min(dLen, si + DESC_DISPLAY_LEN));
     rightPad(textToDisplay, DESC_DISPLAY_LEN);
@@ -683,20 +769,58 @@ namespace NAMES_SCROLL {
     /*
     tbh this could just be a bunch of ifs, it's not really a state
     its more like a flowchart ish
+    * /
+    switch (state) {
+      // not really a state
+      case SCROLL_START:
+        // only need to scroll if channel desc is too big
+        if (dLen > DESC_DISPLAY_LEN)
+          state = SCROLLING;
+        break;
+
+      case SCROLLING:
+        if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
+          ch->scrollIndex += SCROLL_CHARS;
+          // once full desc has been displayed, return to start
+          if (ch->scrollIndex + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
+            ch->scrollIndex = 0;
+            state = SCROLL_END;
+          }
+          ch->lastScrollTime = millis();
+        }
+        break;
+
+      // not really needed? can be handled in SCROLLING
+      case SCROLL_END:
+        ch->scrollIndex = 0;
+        state = SCROLL_START;
+        break;
+    }
+  }
+  */
+
+  void displayChannelName(int row, Channel *ch) {
+    // ch->desc SHOULD NOT be nullptr
+
+    const byte dLen = ch->descLen;
+    byte &si = ch->scrollIndex;
+
+    // NAMES
+    lcd.setCursor(DESC_POSITION, row);
+    char textToDisplay[DESC_DISPLAY_LEN + 1];
+    // memcpy(textToDisplay, ch->desc + si, min(dLen - si, DESC_DISPLAY_LEN));
+    substr(textToDisplay, ch->desc, si, min(dLen - si, DESC_DISPLAY_LEN));
+
+    rightPad(textToDisplay, min(dLen - si, DESC_DISPLAY_LEN), DESC_DISPLAY_LEN);
+    lcd.print(textToDisplay);
+
+    ScrollState &state = ch->scrollState;
+
+    // SCROLL
+    /*
+    tbh this could just be a bunch of ifs, it's not really a state
+    its more like a flowchart ish
     */
-
-    /*if (si + DESC_DISPLAY_LEN > dLen + 1) { // end
-      // +1 to make even lengths work (because of 'trailing' char)
-      // once full desc has been displayed, return to start
-      si = 0;
-    } else { // start/scrolling
-      // only need to scroll if channel desc is too big
-      if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
-        si += SCROLL_CHARS;
-        ch->lastScrollTime = millis();
-      }
-    }*/
-
     switch (state) {
       // not really a state
       case SCROLL_START:
@@ -733,9 +857,9 @@ void setup() {
 
   // UDCHARS
   byte upChevron[] = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
-  lcd.createChar(UP_ARROW_POSITION, upChevron);
+  lcd.createChar(UP_ARROW_CHAR, upChevron);
   byte downChevron[] = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
-  lcd.createChar(DOWN_ARROW_POSITION, downChevron);
+  lcd.createChar(DOWN_ARROW_CHAR, downChevron);
 }
 
 void loop() {
@@ -867,13 +991,51 @@ void handleSerialInput(Channel **topChannelPtr) {
     readCreateCommand(topChannelPtr);
   else if (isValueCommand(cmdId))
     readValueCommand(cmdId);
-  else
+  else // TODO: error
     skipLine(Serial);
 }
 
 /* reading commands */
 
 void readCreateCommand(Channel **topChannelPtr) {
+  if (Serial.available() < 2)
+    return messageError('C', Serial.readStringUntil('\n'));
+
+  char channelId = Serial.read();
+
+  char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
+  byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
+  desc[descLen] = '\0';
+
+  if (!isUpperCase(channelId)) {
+    messageError('C', channelId, desc);
+    free(desc);
+    return;
+  }
+  if (descLen < MAX_DESC_LENGTH) {
+    // reallocate a shorter buffer
+    desc = (char*) realloc(desc, (1 + descLen) * sizeof(*desc));
+  } else if (descLen == MAX_DESC_LENGTH) {
+    // ignore chars after 15th description character
+    skipLine(Serial);
+  }
+
+  Serial.print(F("DEBUG: DESC: ["));
+  Serial.print(desc);
+  Serial.println(']');
+
+  Channel *ch = Channel::create(channelId, desc, descLen);
+
+  // if creating first channel
+  if (*topChannelPtr == nullptr) {
+    Serial.println(F("DEBUG: FIRST CHANNEL MADE"));
+    *topChannelPtr = ch;
+  }
+
+  _EEPROM::updateEEPROM(ch);
+
+  /*
+  //!
   String cmd = Serial.readStringUntil('\n');
 
   uint cmdLen = cmd.length();
@@ -894,16 +1056,15 @@ void readCreateCommand(Channel **topChannelPtr) {
   }
 
   _EEPROM::updateEEPROM(ch);
+  */
 }
 
 void readValueCommand(char cmdId) {
   String cmd = Serial.readStringUntil('\n');
 
   uint cmdLen = cmd.length();
-  if (cmdLen < 2 || cmdLen > 4) {
-    messageError(cmdId, cmd);
-    return;
-  }
+  if (cmdLen < 2 || cmdLen > 4)
+    return messageError(cmdId, cmd);
 
   char channelId = cmd[ 0 ];
   String valueS = cmd.substring(1);
@@ -912,10 +1073,8 @@ void readValueCommand(char cmdId) {
   if (!isUpperCase(channelId)
       || (value == 0 && valueS != "0") // input wasn't numeric
       || isOutOfRange(value)
-     ) {
-    messageError(cmdId, cmd);
-    return;
-  }
+     )
+     return messageError(cmdId, cmd);
 
   Channel *ch = Channel::channelForId(channelId);
   // if channel hasn't been created, don't do anything
@@ -938,11 +1097,17 @@ void readValueCommand(char cmdId) {
   _EEPROM::updateEEPROM(ch);
 }
 
-//? TODO make into macro?
 void messageError(char cmdId, const String &cmd) {
   Serial.print(F("ERROR: "));
   Serial.print(cmdId);
   Serial.println(cmd);
+}
+
+void messageError(char cmdId, char channelId, const char *rest) {
+  Serial.print(F("ERROR: "));
+  Serial.print(cmdId);
+  Serial.print(channelId);
+  Serial.println(rest);
 }
 
 /* display */
@@ -1042,10 +1207,6 @@ void selectDisplay() {
 
 /* Utility functions */
 
-namespace Utils {
-
-}
-
 String rightJustify3Digits(uint num) {
   if (num >= 100)
     return String(num);
@@ -1055,22 +1216,24 @@ String rightJustify3Digits(uint num) {
   return prefix;
 }
 
-// pad spaces to the right of given string, to help overwrite old values
-void rightPad(String &str, size_t desiredLen) {
-  int diff = desiredLen - str.length();
-  while (diff > 0) {
-    str.concat(' ');
-    diff--;
+// pad spaces to the right of given string, to help overwrite old values displayed on lcd
+void rightPad(char *str, size_t currentLen, size_t desiredLen) {
+  for (int i = currentLen; i < desiredLen; i++) {
+    str[i] = ' ';
   }
+  str[desiredLen] = '\0';
 }
 
 void skipLine(Stream &s) {
   s.find('\n');
 }
 
+void substr(char *dest, const char *src, size_t start, size_t len) {
+  memcpy(dest, src + start, len);
+}
 
 // debug
-void _printChannels(Print &p) {
+void _printChannelIds(Print &p) {
   // p.print(F("DEBUG: ch_len?"));
   // p.print(_len);
   p.print(F("DEBUG: channels=["));
@@ -1109,29 +1272,16 @@ void _printChannel(Print &p, Channel *ch, bool newLine) {
   p.print(ch->min);
 
   p.print(F(", description={"));
-  p.print(ch->description);
+  p.print(ch->desc);
   p.print('}');
+  p.print('@');
+  p.print((size_t) ch->desc);
+
+  p.print(F(", descLen="));
+  p.print(ch->descLen);
 
   if (newLine)
     p.println();
-}
-
-void _printChannelsFull(Print &p) {
-  p.println(F("DEBUG: fullChannels = ["));
-
-  if (headChannel == nullptr) {
-    p.println(F("DEBUG: ]"));
-    return;
-  }
-
-  _printChannel(Serial, headChannel);
-  Channel *node = headChannel->next;
-  while (node != nullptr) {
-    _printChannel(Serial, node);
-    node = node->next;
-  }
-
-  p.println(F("DEBUG: ]"));
 }
 
 void _printChannelsFull(Print &p, Channel* head) {
