@@ -46,7 +46,8 @@ Channels are implemented as an ordered singly-linked-list (ordered by channel ID
 | Type | Name | Description |
 | --- | --- | --- |
 | char | id | The channel's ID (A-Z) |
-| String | description | The channel's description/name/title (max. 15 chars) |
+| const char* | desc | The channel's description/name/title (max. 15 chars) |
+| byte | descLen | The length of the channel's description |
 | byte | max | The channel's maximum |
 | byte | min | The channel's minimum |
 | channel_s* | next | Pointer to the next created channel |
@@ -64,7 +65,7 @@ The head of this linked list is stored statically in `Channel::headChannel` and 
 
 | Function | Description |
 | --- | --- |
-| `Channel::create(char, String)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
+| `Channel::create(char, char*, byte)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
 | `Channel::insertChannel(Channel*)` | Inserts the given channel into the linked list of channels in its appropriate position |
 
 ## Debugging
@@ -73,7 +74,7 @@ The head of this linked list is stored statically in `Channel::headChannel` and 
   managed by C macros, then keep this in your submission.  If you have
   other things to say, then put them here.*
 
-Debug functions generally start with `_`.
+Debug functions generally start with `_`, and are commented with `// debug`.
 
 ## Reflection
 
@@ -81,6 +82,8 @@ Debug functions generally start with `_`.
   don’t work as well as you would like and how you would fix them.*
 
 I am very happy with my code. I think I thought of some ingenious solutions to some problems, such as managing the 64 most recent values and managing channels - using linkedlists is more memory friendly, at least initially. I believe everything works as desired.
+
+Though I am unhappy that I mixed C & C++ constructs and didn't necessarily try to stick to one.
 
 ## Extension Features {.unnumbered}
 
@@ -96,7 +99,7 @@ I am very happy with my code. I think I thought of some ingenious solutions to s
 
 *Write about this extension*
 
-The arrows are 2 chevrons pointing in the appropriate direction. Lines 262 and 272 define the chars.
+The arrows are 2 chevrons pointing in the appropriate direction. Lines ? and ? define the chars.
 
 It was simple to implement as it was something done very early.
 
@@ -104,9 +107,9 @@ It was simple to implement as it was something done very early.
 
 *Write about this extension*
 
-Lines 300-302 display the amount of free SRAM.
+Lines ?-? display the amount of free SRAM.
 
-It was simple to implement as it was something done in an early lab.
+It was simple to implement as it was done in the Week 3 lab.
 
 ## HCI
 
@@ -132,25 +135,20 @@ I use the namespace `_EEPROM` for all functions relating to using the EEPROM, na
 
 ## RECENT
 
-The namespace `RECENT` contains all functions related to managing the most recent values.
-
-
 I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value.
 
 `Channel::recentHead` stores the head of the linkedlist, and can be used for all list-related operations.
 
-Another way this could be implemented is using an array of `byte[64]` and keeping track of:
+Another way this could be implemented is using a byte array (`byte[64]`) and keeping track of:
 - the index of the oldest value
 - the number of values that have been entered
 
 e.g.
 
 ```c++
-typdef unsigned int uint;
-
 byte recents[64];
-unsigned int nRecents = 0;
-uint oldestIndex = 0;
+byte nRecents = 0; // max 64
+byte oldestIndex = 0; // 0-63
 
 void addRecent(byte val) {
   if (nRecents == 64) {
@@ -178,7 +176,7 @@ But I think using a linked-list should be more memory-efficient, at least for a 
 
 indicate data structure used to store the channel name and how it is printed to the display
 
-A `String` is used to store the channel description. The first 6 letters are displayed (the description is truncated), using `String#substring`.
+A `const char*` is used to store the channel description/name. The first 6 letters are displayed (the description is truncated) by only printing the first 6. characters instead of the entire thing.
 
 ## SCROLL
 

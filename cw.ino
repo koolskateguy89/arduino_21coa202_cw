@@ -194,7 +194,6 @@ private:
     if (!_addedSixty) {
       for (uint i = 0; i < 60; i++)
         addRecent(random(0, 256));
-        //! RECENT::addRecentValue(random(0, 256));
       _addedSixty = true;
     }
   }
@@ -529,133 +528,6 @@ namespace _EEPROM {
 
 }
 
-// was difficult to think of how to impl RECENT!
-// basic singly-linked-list with only tail addition (polling? is that the term)
-// but with a max size, which once reached, adding will discard head value
-// it's a Queue! FIFO
-//! no longer used
-namespace RECENT {
-  #define MAX_SIZE 64
-
-  void addRecentValue(byte val);
-
-  void _displayAverage(int row, bool display);
-  #define displayAverage(display) _displayAverage(TOP_LINE, display)
-
-  void _displayMostRecentValue(int row, bool display);
-  #define displayMostRecentValue(display) _displayMostRecentValue(BOTTOM_LINE, display)
-
-  namespace {
-    typedef struct node_s {
-      node_s(byte val) {
-        this->val = val;
-        this->next = nullptr;
-      }
-
-      byte val;
-      struct node_s *next;
-    } RecentNode;
-
-    uint calculateAverage();
-
-    RecentNode *recentHead = nullptr;
-    RecentNode *recentTail = nullptr; // keep track of recentTail for O(1) insertion instead of O(n)
-
-    size_t _recentLen = 0; // max 64
-
-    // could use a running sum to make this O(1)
-    uint calculateAverage() { // O(n)
-      if (recentHead == nullptr)
-        return 0;
-
-      uint sum = recentHead->val;
-      RecentNode *node = recentHead->next;
-
-      while (node != nullptr) {
-        sum += node->val;
-        node = node->next;
-      }
-
-      return round(sum / _recentLen);
-    }
-
-    // debug - to help check if recentHead gets deleted
-    void _addSixtyOnce() {
-      static bool done = false;
-
-      if (!done) {
-        for (uint i = 0; i < 60; i++)
-          RECENT::addRecentValue(random(0, 256));
-        done = true;
-      }
-    }
-
-    // debug
-    void _printAll(Print &p) {
-      p.print(F("DEBUG: r_len="));
-      p.print(_recentLen);
-      p.print(F(", ["));
-
-      if (recentHead == nullptr) {
-        p.println(F("DEBUG: ]"));
-        return;
-      }
-
-      p.print(recentHead->val);
-      RecentNode *node = recentHead->next;
-      while (node != nullptr) {
-        p.print(',');
-        p.print(node->val);
-        node = node->next;
-      }
-
-      p.println(F("DEBUG: ]"));
-    }
-  }
-
-  void addRecentValue(byte val) {  // O(1)
-    if (recentHead == nullptr) {
-      recentHead = recentTail = new RecentNode(val);
-      _recentLen = 1;
-      return;
-    }
-
-    // because we only care about the most recent MAX_SIZE values, we can discard (delete)
-    // the oldest value, kind of like an LRU cache
-    if (_recentLen == MAX_SIZE) {
-      RecentNode *oldHead = recentHead;
-      recentHead = recentHead->next;
-      delete oldHead;
-      _recentLen--;
-    }
-
-    RecentNode *node = new RecentNode(val);
-    recentTail->next = node;
-    recentTail = node;
-    _recentLen++;
-  }
-
-  void _displayMostRecentValue(int row, bool display) {
-    display &= recentTail != nullptr;
-
-    lcd.setCursor(RECENT_POSITION, row);
-    lcd.print(display ? ',' : ' ');
-
-    String tailVal = display ? rightJustify3Digits(recentTail->val) : F("   ");
-    lcd.print(tailVal);
-  }
-
-  void _displayAverage(int row, bool display) {
-    display &= recentHead != nullptr;
-
-    lcd.setCursor(RECENT_POSITION, row);
-    lcd.print(display ? ',' : ' ');
-
-    String avrg = display ? rightJustify3Digits(calculateAverage()) : F("   ");
-    lcd.print(avrg);
-  }
-}
-
 // NAMES and SCROLL together, it makes sense
 /*
  * [currently] Uses a FSM to manage scrolling state, uses Channel variables
@@ -934,7 +806,6 @@ void readValueCommand(char cmdId) {
 
   switch (cmdId) {
     case 'V':
-      //! RECENT::addRecentValue(value);
       ch->setData(value);
       break;
     case 'X':
@@ -1005,10 +876,6 @@ void updateDisplay(Channel *const topChannel) {
   } else {
     clearChannelRow(BOTTOM_LINE);
   }
-
-  // RECENT
-  //! RECENT::displayAverage(/*TOP_LINE, */topChannel != nullptr);
-  //! RECENT::displayMostRecentValue(/*BOTTOM_LINE, */btmChannel != nullptr);
 }
 
 /*
