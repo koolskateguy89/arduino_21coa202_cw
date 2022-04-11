@@ -358,10 +358,7 @@ void updateBacklight();
 void selectDisplay();
 // utils
 String rightJustify3Digits(uint num);
-// void rightPad(String &str, size_t desiredLen);
-void rightPad(char *str, size_t currentLen, size_t desiredLen);
 void skipLine(Stream &s);
-void substr(char *dest, const char *src, size_t start, size_t len);
 
 
 /* globals */
@@ -548,18 +545,11 @@ namespace NAMES_SCROLL {
 
     // NAMES
     lcd.setCursor(DESC_POSITION, row);
-    // char textToDisplay[ DESC_DISPLAY_LEN + 1 ];
     for (int i = si; i < si + DESC_DISPLAY_LEN; i++) {
       // display space(s) at end to overwrite old displayed value
       char c = (i < dLen) ? ch->desc[ i ] : ' ';
       lcd.print(c);
     }
-
-    //!* substr unused
-    //substr(textToDisplay, ch->desc, si, min(dLen - si, DESC_DISPLAY_LEN));
-    //!* rightPad unused
-    //rightPad(textToDisplay, min(dLen - si, DESC_DISPLAY_LEN), DESC_DISPLAY_LEN);
-    //lcd.print(textToDisplay);
 
     ScrollState &state = ch->scrollState;
 
@@ -934,22 +924,8 @@ String rightJustify3Digits(uint num) {
   return prefix;
 }
 
-// pad spaces to the right of given string, to help overwrite old values displayed on lcd
-//!* rightPad unused
-void rightPad(char *str, size_t currentLen, size_t desiredLen) {
-  for (int i = currentLen; i < desiredLen; i++) {
-    str[ i ] = ' ';
-  }
-  str[ desiredLen ] = '\0';
-}
-
 void skipLine(Stream &s) {
   s.find('\n');
-}
-
-//!* substr unused
-void substr(char *dest, const char *src, size_t start, size_t len) {
-  memcpy(dest, src + start, len);
 }
 
 // debug
