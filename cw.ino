@@ -296,8 +296,9 @@ Channel *Channel::create(char id, const char *desc, byte descLen) {
     // shouldn't free/delete because 'all channels will be used'
     ch = new Channel(id, desc, descLen);
     insertChannel(ch);
-  } else
+  } else {
     ch->setDescription(desc, descLen);
+  }
 
   return ch;
 }
@@ -398,7 +399,7 @@ namespace FREERAM {
   void displayFreeMemory(int row = BOTTOM_LINE);
 
   namespace { // 'private', helper methods
-    // lab sheet 5
+    // week 3 lab
     uint freeMemory() {
       char top;
       #ifdef __arm__
@@ -453,7 +454,7 @@ namespace _EEPROM {
 
     void readString(int offset, char *desc, byte len) {
       eeprom_read_block(desc, (void*) offset, len);
-      desc[len] = '\0';
+      desc[ len ] = '\0';
     }
 
     Channel *readChannel(char id) {
@@ -675,12 +676,18 @@ namespace NAMES_SCROLL {
 
     // NAMES
     lcd.setCursor(DESC_POSITION, row);
-    char textToDisplay[DESC_DISPLAY_LEN + 1];
-    // memcpy(textToDisplay, ch->desc + si, min(dLen - si, DESC_DISPLAY_LEN));
-    substr(textToDisplay, ch->desc, si, min(dLen - si, DESC_DISPLAY_LEN));
+    // char textToDisplay[ DESC_DISPLAY_LEN + 1 ];
+    for (int i = si; i < si + DESC_DISPLAY_LEN; i++) {
+      // display space(s) at end to overwrite old displayed value
+      char c = (i < dLen) ? ch->desc[ i ] : ' ';
+      lcd.print(c);
+    }
 
-    rightPad(textToDisplay, min(dLen - si, DESC_DISPLAY_LEN), DESC_DISPLAY_LEN);
-    lcd.print(textToDisplay);
+    //!* substr unused
+    //substr(textToDisplay, ch->desc, si, min(dLen - si, DESC_DISPLAY_LEN));
+    //!* rightPad unused
+    //rightPad(textToDisplay, min(dLen - si, DESC_DISPLAY_LEN), DESC_DISPLAY_LEN);
+    //lcd.print(textToDisplay);
 
     ScrollState &state = ch->scrollState;
 
@@ -873,7 +880,7 @@ void readCreateCommand(Channel **topChannelPtr) {
 
   char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
   byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
-  desc[descLen] = '\0';
+  desc[ descLen ] = '\0';
 
   if (!isUpperCase(channelId)) {
     messageError('C', channelId, desc);
@@ -1061,17 +1068,19 @@ String rightJustify3Digits(uint num) {
 }
 
 // pad spaces to the right of given string, to help overwrite old values displayed on lcd
+//!* rightPad unused
 void rightPad(char *str, size_t currentLen, size_t desiredLen) {
   for (int i = currentLen; i < desiredLen; i++) {
-    str[i] = ' ';
+    str[ i ] = ' ';
   }
-  str[desiredLen] = '\0';
+  str[ desiredLen ] = '\0';
 }
 
 void skipLine(Stream &s) {
   s.find('\n');
 }
 
+//!* substr unused
 void substr(char *dest, const char *src, size_t start, size_t len) {
   memcpy(dest, src + start, len);
 }
