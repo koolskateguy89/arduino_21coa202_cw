@@ -110,19 +110,12 @@ ahh I think that might be better
 // creating new channel will just insert it between 2 nodes
 // takes 21 -> ~103 bytes
 typedef struct channel_s {
-  /*channel_s(char id) {
-    //!
-    this->id = id;
-    this->setDescription("");
-    this->setDescription("", 0);
-  }*/
   channel_s(char id, const char *desc, byte descLen) {
     this->id = id;
     this->setDescription(desc, descLen);
   }
 
   char id;
-  //! String description;
   const char *desc = nullptr;
   byte descLen;
 
@@ -135,14 +128,6 @@ typedef struct channel_s {
   byte scrollIndex;
   ulong lastScrollTime;
   ScrollState scrollState;
-
-  /*void setDescription(String desc) {
-    //!
-    description = desc;
-    // SCROLL, reset scrolling
-    scrollIndex = lastScrollTime = 0;
-    scrollState = SCROLL_START;
-  }*/
 
   void setDescription(const char *desc, byte descLen) {
     if (this->desc != nullptr)
@@ -300,25 +285,6 @@ void Channel::insertChannel(Channel *ch) {
   ch->next = prev->next;
   prev->next = ch;
 }
-
-// create new channel if not already created, else use new description
-/*
-//!
-Channel *Channel::create(char id, String description) {
-  Channel *ch = Channel::channelForId(id);
-
-  if (ch == nullptr) {
-    Serial.print(F("DEBUG: Making new channel with id "));
-    Serial.println(id);
-    // shouldn't free/delete because 'all channels will be used'
-    ch = new Channel(id);
-    insertChannel(ch);
-  }
-
-  ch->setDescription(description);
-  return ch;
-}
-*/
 
 // create new channel if not already created, else use new description
 Channel *Channel::create(char id, const char *desc, byte descLen) {
@@ -480,18 +446,6 @@ namespace _EEPROM {
   Channel *readEEPROM();
 
   namespace {
-    /*
-    void writeString(int offset, const String &desc) {
-      //!
-      const byte len = desc.length();
-      EEPROM.update(offset, len);
-
-      for (int i = 0; i < len; i++) {
-        EEPROM.update(offset + 1 + i, desc[ i ]);
-      }
-    }
-    */
-
     void writeString(int offset, const char *desc, byte len) {
       EEPROM.update(offset, len);
       eeprom_update_block(desc, (void*) (offset + 1), len);
@@ -501,22 +455,6 @@ namespace _EEPROM {
       eeprom_read_block(desc, (void*) offset, len);
       desc[len] = '\0';
     }
-
-    // returns whether the length is valid or not
-    /*
-    bool readString(int offset, String &desc) {
-      //!
-      const byte len = EEPROM[ offset ];
-      if (len > MAX_DESC_LENGTH)
-        return false;
-
-      for (int i = 0; i < len; i++) {
-        desc += (char) EEPROM[ offset + 1 + i ];
-      }
-
-      return true;
-    }
-    */
 
     Channel *readChannel(char id) {
       const uint idAddr = addressForId(id);
@@ -533,39 +471,17 @@ namespace _EEPROM {
       char *desc = (char*) malloc((1 + descLen) * sizeof(*desc));
       readString(descOffset(idAddr) + 1, desc, descLen);
 
-      //!String desc;
-      // if the stored description isn't valid
-      //if (!readString(descOffset(idAddr), desc))
-        //return nullptr;
-
       byte max = EEPROM[ maxOffset(idAddr) ];
 
       byte min = EEPROM[ minOffset(idAddr) ];
 
       Channel *ch = new Channel(id, desc, descLen);
-      // ! ch->setDescription(desc);
       ch->max = max;
       ch->min = min;
 
       return ch;
     }
   }
-
-  /*
-  void updateEEPROM(const Channel *ch) {
-    //!
-    if (ch == nullptr)
-     return;
-
-    uint addr = addressForId(ch->id);
-
-    EEPROM.update(addr, ch->id);
-    EEPROM.update(maxOffset(addr), ch->max);
-    EEPROM.update(minOffset(addr), ch->min);
-
-    writeString(descOffset(addr), ch->description);
-  }
-  */
 
   void updateEEPROM(const Channel *ch) {
     if (ch == nullptr)
@@ -750,54 +666,6 @@ namespace NAMES_SCROLL {
   #define DESC_DISPLAY_LEN  6
 
   void displayChannelName(int row, Channel *ch);
-
-  /*
-  void displayChannelName(int row, Channel *ch) {
-    //!
-    const byte dLen = ch->description.length();
-    byte &si = ch->scrollIndex;
-
-    // NAMES
-    lcd.setCursor(DESC_POSITION, row);
-    String textToDisplay = ch->description.substring(si, min(dLen, si + DESC_DISPLAY_LEN));
-    rightPad(textToDisplay, DESC_DISPLAY_LEN);
-    lcd.print(textToDisplay);
-
-    ScrollState &state = ch->scrollState;
-
-    // SCROLL
-    /*
-    tbh this could just be a bunch of ifs, it's not really a state
-    its more like a flowchart ish
-    * /
-    switch (state) {
-      // not really a state
-      case SCROLL_START:
-        // only need to scroll if channel desc is too big
-        if (dLen > DESC_DISPLAY_LEN)
-          state = SCROLLING;
-        break;
-
-      case SCROLLING:
-        if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
-          ch->scrollIndex += SCROLL_CHARS;
-          // once full desc has been displayed, return to start
-          if (ch->scrollIndex + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
-            ch->scrollIndex = 0;
-            state = SCROLL_END;
-          }
-          ch->lastScrollTime = millis();
-        }
-        break;
-
-      // not really needed? can be handled in SCROLLING
-      case SCROLL_END:
-        ch->scrollIndex = 0;
-        state = SCROLL_START;
-        break;
-    }
-  }
-  */
 
   void displayChannelName(int row, Channel *ch) {
     // ch->desc SHOULD NOT be nullptr
@@ -1033,30 +901,6 @@ void readCreateCommand(Channel **topChannelPtr) {
   }
 
   _EEPROM::updateEEPROM(ch);
-
-  /*
-  //!
-  String cmd = Serial.readStringUntil('\n');
-
-  uint cmdLen = cmd.length();
-  if (cmdLen < 2 || !isUpperCase(cmd[ 0 ])) {
-    messageError('C', cmd);
-    return;
-  }
-
-  char channelId = cmd[ 0 ];
-  String description = cmd.substring(1, min(cmdLen, 1 + MAX_DESC_LENGTH));
-
-  Channel *ch = Channel::create(channelId, description);
-
-  // if creating first channel
-  if (*topChannelPtr == nullptr) {
-    Serial.println(F("DEBUG: FIRST CHANNEL MADE"));
-    *topChannelPtr = ch;
-  }
-
-  _EEPROM::updateEEPROM(ch);
-  */
 }
 
 void readValueCommand(char cmdId) {
