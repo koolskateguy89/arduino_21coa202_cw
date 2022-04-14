@@ -42,7 +42,7 @@
 
 #define isCreateCommand(cmdId) ((cmdId) == 'C')
 #define isValueCommand(cmdId)  ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
-#define isOutOfRange(value)    ((value) < 0 || (value) > 255)
+#define isOutOfByteRange(value)    ((value) < 0 || (value) > 255)
 
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
@@ -69,22 +69,20 @@ typedef enum { // TODO: finish
   SYNCHRONISATION,
   AFTER_SYNC,
   MAIN, // basically AWAITING_MESSAGE and AWAITING_PRESS
-
+  SELECT_IS_HELD,
+  SELECT_AWAITING_RELEASE,
   UP_PRESSED,
   DOWN_PRESSED,
-  SELECT_IS_HELD, // TODO: better name?
-  SELECT_AWAITING_RELEASE,
-
   // HCI
-  HCI_LEFT, // TODO
-  HCI_RIGHT, // TODO
+  LEFT_PRESSED, // TODO
+  RIGHT_PRESSED, // TODO
 } State;
 
 // affect get_bottom
 typedef enum {
   NORMAL,
-  LEFT,
-  RIGHT,
+  LEFT_MIN,
+  RIGHT_MAX,
 } HciState;
 
 typedef enum {
@@ -149,6 +147,8 @@ typedef struct channel_s {
   basic singly-linked-list with only tail addition (polling? is that the term)
   but with a max size, which once reached, adding will discard head value
   it's a Queue! FIFO
+
+  maybe use running sum
   */
 private:
   typedef struct node_s {
@@ -188,20 +188,20 @@ private:
     recentLen++;
   }
 
-  // debug - to help check if recentHead gets deleted
-  bool _addedSixty = false;
-  void _addSixtyRecentsOnce() {
-    if (!_addedSixty) {
-      for (uint i = 0; i < 60; i++)
-        addRecent(random(0, 256));
-      _addedSixty = true;
-    }
-  }
+  // debug - to help check if old recentHead gets deleted once reached max size
+  // bool _addedSixty = false;
+  // void _addSixtyRecentsOnce() {
+  //   if (!_addedSixty) {
+  //     for (uint i = 0; i < 60; i++)
+  //       addRecent(random(0, 256));
+  //     _addedSixty = true;
+  //   }
+  // }
 
 public:
   // RECENT
   byte getAverageValue() const {
-    if (recentHead == nullptr)
+    if (recentHead == nullptr || recentLen == 0)
       return 0;
 
     uint sum = recentHead->val;
@@ -248,20 +248,62 @@ public:
     return recentTail == nullptr ? 0 : recentTail->val;
   }
 
+  bool meetsHciRequirement(HciState hciState) const {
+    switch (hciState) {
+      case NORMAL:
+        return true; // no requirement for NORMAL
+
+      case LEFT_MIN:
+        return valueHasBeenSet() && getData() < min;
+
+      case RIGHT_MAX:
+        return valueHasBeenSet() && getData() > max;
+    }
+  }
+
+
   static channel_s *headChannel;
 
   // these methods assume provided ID is valid (A-Z)
-  //static channel_s *create(char id, String description);
   static channel_s *create(char id, const char *desc, byte descLen);
   static channel_s *channelForId(char id);
+  // static bool meetsHciRequirement(const channel_s *ch, HciState hciState);
+  static channel_s *firstChannel(HciState hciState);
   static channel_s *channelBefore(const channel_s *ch);
-  static channel_s *getBottom(const channel_s *topChannel);
-  static bool canGoUp(const channel_s *topChannel);
-  static bool canGoDown(const channel_s *topChannel);
-
+  static channel_s *channelBefore(const channel_s *ch, HciState hciState);
+  static channel_s *channelAfter(const channel_s *ch);
+  static channel_s *channelAfter(const channel_s *ch, HciState hciState);
+  static bool canGoUp(const channel_s *topChannel, HciState hciState);
+  static bool canGoDown(const channel_s *topChannel, HciState hciState);
 private:
   static void insertChannel(channel_s *ch);
 } Channel;
+
+
+/* function prototypes */
+// main
+void handleSerialInput(Channel **topChannelPtr);
+// reading commands (main)
+void readCreateCommand(Channel **topChannel);
+void readValueCommand(char cmdId);
+void messageError(char cmdId);
+void messageError(char cmdId, char channelId);
+void messageError(char cmdId, char channelId, const String &rest);
+void printRestOfMessage();
+// handling button presses (main)
+// TODO
+// display
+void displayChannel(uint8_t row, Channel *ch);
+void clearChannelRow(uint8_t row);
+void updateDisplay(Channel *topChannel, HciState hciState);
+void updateBacklight(HciState hciState);
+void selectDisplay();
+// utils
+String rightJustify3Digits(uint num);
+void skipLine(Stream &s);
+// debug
+void _printChannel(Print &p, const Channel *ch, bool newLine = true);
+
 
 Channel *Channel::headChannel = nullptr;
 
@@ -314,6 +356,19 @@ Channel *Channel::channelForId(char id) {
   return nullptr;
 }
 
+Channel *Channel::firstChannel(HciState hciState) {
+  Channel *ch = headChannel;
+
+  while (ch != nullptr) {
+    if (ch->meetsHciRequirement(hciState))
+      return ch;
+    ch = ch->next;
+  }
+
+  return nullptr;
+}
+
+// TODO: remove once overload with hciState is done
 Channel *Channel::channelBefore(const Channel *ch) {
   if (ch == headChannel)
     return nullptr;
@@ -329,42 +384,86 @@ Channel *Channel::channelBefore(const Channel *ch) {
   return nullptr;
 }
 
-Channel *Channel::getBottom(const Channel *topChannel) {
+Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
+  //! TODO: REMOVE once this impl is done
+  // return channelBefore(ch);
+
+  Channel *head = firstChannel(hciState);
+
+  if (ch == head)
+    return nullptr;
+
+  Channel *prev = head;
+
+  while (prev != nullptr) {
+    Channel *node = channelAfter(prev, hciState);
+    if (node == ch)
+      return prev;
+    prev = node;
+  }
+
+  return nullptr;
+}
+
+// TODO: use overload with hciState instead
+Channel *Channel::channelAfter(const Channel *topChannel) {
   return topChannel == nullptr ? nullptr : topChannel->next;
 }
 
-bool Channel::canGoUp(const Channel *topChannel) {
-  return topChannel != headChannel;
+Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
+  Channel *next = ch->next;
+
+  if (hciState == NORMAL) {
+    return next;
+  }
+
+  while (next != nullptr) {
+    if (next->meetsHciRequirement(hciState)) {
+      _printChannel(Serial, next);
+      // Serial.println(next->id);
+      return next;
+    }
+    next = next->next;
+  }
+
+  return nullptr;
 }
 
-bool Channel::canGoDown(const Channel *topChannel) {
-  return topChannel != nullptr && topChannel->next != nullptr && topChannel->next->next != nullptr;
+bool Channel::canGoUp(const Channel *topChannel, HciState hciState) {
+  if (topChannel == headChannel)
+    return false;
+
+  if (hciState == NORMAL)
+    return true; // topChannel != headChannel
+
+  Channel *node = headChannel;
+
+  // try and find any node before topChannel that meets hciState's requirement
+  while (node != nullptr) {
+    if (node->meetsHciRequirement(hciState))
+      return true;
+    if (node->next == topChannel)
+      break;
+  }
+
+  return false;
+
+  // TODO? this should work
+  // return channelBefore(topChannel, hciState) != nullptr;
 }
 
-/* function prototypes */
-// main (is that gonna be state name?)
-void handleSerialInput(Channel **topChannelPtr);
-// reading commands (main)
-void readCreateCommand(Channel **topChannel);
-void readValueCommand(char cmdId);
-void messageError(char cmdId, const String &cmd);
-// handling button presses (main)
-// TODO
-// display
-void displayChannel(uint8_t row, Channel *ch);
-void clearChannelRow(uint8_t row);
-void updateDisplay(Channel *topChannel);
-void updateBacklight();
-void selectDisplay();
-// utils
-String rightJustify3Digits(uint num);
-void skipLine(Stream &s);
+bool Channel::canGoDown(const Channel *topChannel, HciState hciState) {
+  // TODO? this may work
+  if (topChannel == nullptr || topChannel->next == nullptr)
+    return false;
 
+  Channel *bottom = channelAfter(topChannel, hciState);
+
+  return channelAfter(bottom, hciState) != nullptr;
+}
 
 /* globals */
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-Channel *&headChannel = Channel::headChannel;
-
 
 /* extensions */
 
@@ -599,8 +698,21 @@ void setup() {
   lcd.createChar(DOWN_ARROW_CHAR, downChevron);
 }
 
+// debug
+void _printHciState(HciState hciState) {
+  Serial.print(F("DEBUG: HciState: "));
+  if (hciState == NORMAL) {
+    Serial.println(F("NORMAL"));
+  } else if (hciState == LEFT_MIN) {
+    Serial.println(F("LEFT_MIN"));
+  } else {
+    Serial.println(F("RIGHT_MAX"));
+  }
+}
+
 void loop() {
   static State state = INITIALISATION;
+  static HciState hciState = NORMAL;
   static Channel *topChannel; // btmChannel ~= topChannel->next
   static ulong selectPressTime;
 
@@ -608,7 +720,8 @@ void loop() {
 
   switch (state) {
   case INITIALISATION:
-    topChannel = headChannel = nullptr;
+    // topChannel = headChannel = nullptr;
+    topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
     state = SYNCHRONISATION;
     break;
@@ -631,7 +744,8 @@ void loop() {
     Serial.println(IMPLEMENTED_EXTENSIONS);
 
     // EEPROM
-    topChannel = headChannel = _EEPROM::readEEPROM();
+    // topChannel = headChannel = _EEPROM::readEEPROM();
+    topChannel = Channel::headChannel = _EEPROM::readEEPROM();
     Serial.println(F("DEBUG: Channels stored in EEPROM:"));
     _printChannelsFull(Serial, topChannel);
 
@@ -642,44 +756,44 @@ void loop() {
     b = lcd.readButtons();
 
     if (b & BUTTON_SELECT) {
-      Serial.println(F("DEBUG: Select pressed"));
+      Serial.println(F("DEBUG: SELECT pressed"));
       selectPressTime = millis();
       state = SELECT_IS_HELD;
-      break;
+
     } else if (b & BUTTON_UP) {
-      Serial.println(F("DEBUG: Up pressed"));
-      if (Channel::canGoUp(topChannel))
-        topChannel = Channel::channelBefore(topChannel);
+      Serial.println(F("DEBUG: UP pressed"));
+      if (Channel::canGoUp(topChannel, hciState))
+        topChannel = Channel::channelBefore(topChannel, hciState);
       state = UP_PRESSED;
-      break;
+
     } else if (b & BUTTON_DOWN) {
-      Serial.println(F("DEBUG: Down pressed"));
-      if (Channel::canGoDown(topChannel))
-        topChannel = topChannel->next;
+      Serial.println(F("DEBUG: DOWN pressed"));
+      if (Channel::canGoDown(topChannel, hciState))
+        topChannel = Channel::channelAfter(topChannel, hciState);
       state = DOWN_PRESSED;
-      break;
+
     } else if (b & BUTTON_LEFT) {
+      Serial.println(F("DEBUG: LEFT pressed"));
+      // HCI
+      hciState = (hciState == LEFT_MIN) ? NORMAL : LEFT_MIN;
+      _printHciState(hciState);
+      // 'reset' topChannel (get first channel that meets hcistate)
+      topChannel = Channel::firstChannel(hciState);
+      state = LEFT_PRESSED;
 
-    } else if (b & BUTTON_RIGHT) {
-
+    } else if (b & BUTTON_RIGHT){
+      Serial.println(F("DEBUG: RIGHT pressed"));
+      // HCI
+      hciState = (hciState == RIGHT_MAX) ? NORMAL : RIGHT_MAX;
+      _printHciState(hciState);
+      // 'reset' topChannel
+      topChannel = Channel::firstChannel(hciState);
+      state = RIGHT_PRESSED;
     }
-    // TODO: button_left & button_right
 
     handleSerialInput(&topChannel);
 
-    updateDisplay(topChannel);
-    break;
-
-  // wait until up is released
-  case UP_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_UP))
-      state = MAIN;
-    break;
-
-  // wait until down is released
-  case DOWN_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_DOWN))
-      state = MAIN;
+    updateDisplay(topChannel, hciState);
     break;
 
   case SELECT_IS_HELD:  // select is currently being held, waiting to reach 1 second
@@ -715,6 +829,38 @@ void loop() {
 
     handleSerialInput(&topChannel);
     break;
+
+  // wait until up is released
+  case UP_PRESSED:
+    if (!(lcd.readButtons() & BUTTON_UP)) {
+      Serial.println(F("DEBUG: UP released"));
+      state = MAIN;
+    }
+    break;
+
+  // wait until down is released
+  case DOWN_PRESSED:
+    if (!(lcd.readButtons() & BUTTON_DOWN)) {
+      Serial.println(F("DEBUG: DOWN released"));
+      state = MAIN;
+    }
+    break;
+
+  // wait until left is released?
+  case LEFT_PRESSED:
+    if (!(lcd.readButtons() & BUTTON_LEFT)) {
+      Serial.println(F("DEBUG: LEFT released"));
+      state = MAIN;
+    }
+    break;
+
+  // wait until right is released?
+  case RIGHT_PRESSED:
+    if (!(lcd.readButtons() & BUTTON_RIGHT)) {
+      Serial.println(F("DEBUG: RIGHT released"));
+      state = MAIN;
+    }
+    break;
   }
 }
 
@@ -728,27 +874,25 @@ void handleSerialInput(Channel **topChannelPtr) {
     readCreateCommand(topChannelPtr);
   else if (isValueCommand(cmdId))
     readValueCommand(cmdId);
-  else // TODO: error
-    skipLine(Serial);
+  else
+    messageError(cmdId);
 }
 
 /* reading commands */
 
 void readCreateCommand(Channel **topChannelPtr) {
   if (Serial.available() < 2)
-    return messageError('C', Serial.readStringUntil('\n'));
+    return messageError('C');
 
   char channelId = Serial.read();
+
+  if (!isUpperCase(channelId))
+    return messageError('C', channelId);
 
   char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
   byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
   desc[ descLen ] = '\0';
 
-  if (!isUpperCase(channelId)) {
-    messageError('C', channelId, desc);
-    free(desc);
-    return;
-  }
   if (descLen < MAX_DESC_LENGTH) {
     // reallocate a shorter buffer
     desc = (char*) realloc(desc, (1 + descLen) * sizeof(*desc));
@@ -773,21 +917,21 @@ void readCreateCommand(Channel **topChannelPtr) {
 }
 
 void readValueCommand(char cmdId) {
-  String cmd = Serial.readStringUntil('\n');
+  if (Serial.available() < 2 || Serial.available() > MAX_CMD_LENGTH - 1)
+    return messageError(cmdId);
 
-  uint cmdLen = cmd.length();
-  if (cmdLen < 2 || cmdLen > 4)
-    return messageError(cmdId, cmd);
+  char channelId = Serial.read();
 
-  char channelId = cmd[ 0 ];
-  String valueS = cmd.substring(1);
+  if (!isUpperCase(channelId))
+    return messageError(cmdId, channelId);
+
+  String valueS = Serial.readStringUntil('\n');
   long value = valueS.toInt();
 
-  if (!isUpperCase(channelId)
-      || (value == 0 && valueS != "0") // input wasn't numeric
-      || isOutOfRange(value)
-     )
-     return messageError(cmdId, cmd);
+  if ((value == 0 && valueS != "0") // input wasn't numeric
+      || isOutOfByteRange(value)
+      )
+     return messageError(cmdId, channelId, valueS);
 
   Channel *ch = Channel::channelForId(channelId);
   // if channel hasn't been created, don't do anything
@@ -809,17 +953,35 @@ void readValueCommand(char cmdId) {
   _EEPROM::updateEEPROM(ch);
 }
 
-void messageError(char cmdId, const String &cmd) {
-  Serial.print(F("ERROR: "));
+void messageError(char cmdId) {
+  Serial.print(F("ERROR:"));
   Serial.print(cmdId);
-  Serial.println(cmd);
+  printRestOfMessage();
 }
 
-void messageError(char cmdId, char channelId, const char *rest) {
-  Serial.print(F("ERROR: "));
+void messageError(char cmdId, char channelId) {
+  Serial.print(F("ERROR:"));
+  Serial.print(cmdId);
+  Serial.print(channelId);
+  printRestOfMessage();
+}
+
+void messageError(char cmdId, char channelId, const String &rest) {
+  Serial.print(F("ERROR:"));
   Serial.print(cmdId);
   Serial.print(channelId);
   Serial.println(rest);
+}
+
+// instead of reading entire message then printing it to serial
+// we can just read a char then immediately print it
+void printRestOfMessage() {
+  while (Serial.available()) {
+    char read = Serial.read();
+    Serial.print(read);
+    if (read == '\n')
+      break;
+  }
 }
 
 /* display */
@@ -844,26 +1006,34 @@ void displayChannel(uint8_t row, Channel *ch) {
 
 void clearChannelRow(uint8_t row) {
   lcd.setCursor(ID_POSITION, row);
-  lcd.print(F("    "));
+  lcd.print(F("                "));
 }
 
-void updateDisplay(Channel *const topChannel) {
-  updateBacklight();
+void updateDisplay(Channel *const topChannel, HciState hciState) {
+  updateBacklight(hciState);
 
   // UDCHARS,HCI
-  UDCHARS::displayUpArrow(Channel::canGoUp(topChannel));
-  UDCHARS::displayDownArrow(Channel::canGoDown(topChannel));
+  UDCHARS::displayUpArrow(Channel::canGoUp(topChannel, hciState));
+  UDCHARS::displayDownArrow(Channel::canGoDown(topChannel, hciState));
 
   if (topChannel != nullptr) {
+    Serial.print(F("TOP: "));
+    Serial.println(topChannel->id);
     displayTopChannel(topChannel);
   } else {
+    Serial.println(F("TOP: NONE"));
     clearChannelRow(TOP_LINE);
   }
 
-  Channel *const btmChannel = Channel::getBottom(topChannel);
+  Channel *const btmChannel = Channel::channelAfter(topChannel, hciState);
   if (btmChannel != nullptr) {
+    //!
+    Serial.print(F("BTM: "));
+    Serial.println(btmChannel->id);
     displayBottomChannel(btmChannel);
   } else {
+    //!
+    Serial.println(F("BTM: NONE"));
     clearChannelRow(BOTTOM_LINE);
   }
 }
@@ -874,15 +1044,16 @@ void updateDisplay(Channel *const topChannel) {
 - Any number below min: green
 - If both: yellow
 */
-void updateBacklight() {
+void updateBacklight(HciState hciState) {
   // take advantage of the fact that YELLOW == RED | GREEN
   uint color = 0;
 
-  Channel *ch = headChannel;
+  Channel *ch = Channel::headChannel;
 
   while (ch != nullptr) {
-    // ignore channel if its value hasn't been set by a command
-    if (!ch->valueHasBeenSet()) {
+    // ignore channel if its value hasn't been set by a command, or it is
+    // being ignored because of current HCI state
+    if (!(ch->valueHasBeenSet() && ch->meetsHciRequirement(hciState))) {
       ch = ch->next;
       continue;
     }
@@ -929,20 +1100,17 @@ void skipLine(Stream &s) {
 }
 
 // debug
-void _printChannelIds(Print &p) {
-  // p.print(F("DEBUG: ch_len?"));
-  // p.print(_len);
+void _printChannelIds(Print &p, const Channel *head) {
   p.print(F("DEBUG: channels=["));
-  // p.print(F(" ["));
 
-  if (headChannel == nullptr) {
+  if (head == nullptr) {
     p.println(']');
     return;
   }
 
-  p.print(headChannel->id);
-  //_printChannel(Serial, headChannel)
-  Channel *node = headChannel->next;
+  p.print(head->id);
+  //_printChannel(Serial, head)
+  Channel *node = head->next;
   while (node != nullptr) {
     p.print(',');
     p.print(node->id);
@@ -953,8 +1121,7 @@ void _printChannelIds(Print &p) {
 }
 
 // debug
-void _printChannel(Print &p, Channel *ch, bool newLine = true);
-void _printChannel(Print &p, Channel *ch, bool newLine) {
+void _printChannel(Print &p, const Channel *ch, bool newLine) {
   p.print(F("DEBUG: Channel "));
   p.print(ch->id);
 
@@ -997,3 +1164,9 @@ void _printChannelsFull(Print &p, Channel* head) {
 
   p.println(F("DEBUG: ]"));
 }
+
+/*
+TODO
+what about Serial sends 'CA'
+then 5s later sends 'sadad\n'
+*/
