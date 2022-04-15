@@ -5,19 +5,16 @@
 #include <avr/eeprom.h>
 
 #define STUDENT_ID             F("    F120840     ")
-#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,EEPROM,RECENT,NAMES,SCROLL")
+#define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,HCI,EEPROM,RECENT,NAMES,SCROLL")
 
-// change defines to const int?
-
-#define NCOLORS  7
-#define BL_OFF 0x0
-#define RED    0x1
-#define GREEN  0x2
-#define YELLOW 0x3
-#define BLUE   0x4
-#define PURPLE 0x5
-#define TEAL   0x6
-#define WHITE  0x7
+#define BL_OFF   0
+#define RED      1
+#define GREEN    2
+#define YELLOW   3
+#define BLUE     4
+#define PURPLE   5
+#define TEAL     6
+#define WHITE    7
 
 #define UP_ARROW_CHAR   0
 #define DOWN_ARROW_CHAR 1
@@ -44,6 +41,8 @@
 #define isValueCommand(cmdId)  ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
 #define isOutOfByteRange(value)    ((value) < 0 || (value) > 255)
 
+#define DEBUG(channelId) Serial.print(F("DEBUG: ")); Serial.print(channelId); Serial.print(F(" - "));
+
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
 
@@ -64,7 +63,7 @@ extern char *__brkval;
 typedef unsigned int uint;
 typedef unsigned long ulong;
 
-typedef enum { // TODO: finish
+typedef enum {
   INITIALISATION,
   SYNCHRONISATION,
   AFTER_SYNC,
@@ -74,8 +73,8 @@ typedef enum { // TODO: finish
   UP_PRESSED,
   DOWN_PRESSED,
   // HCI
-  LEFT_PRESSED, // TODO
-  RIGHT_PRESSED, // TODO
+  LEFT_PRESSED,
+  RIGHT_PRESSED,
 } State;
 
 // affect get_bottom
@@ -104,7 +103,7 @@ ahh I think that might be better
  - easier getting previous channel
  - logic is simpler cos not implementing linkedlist
 */
-// singly-linked-list, impl. similar to a TreeSet<Byte> (Java)
+// singly-linked-list, impl. similar to Java's TreeSet
 // creating new channel will just insert it between 2 nodes
 // takes 21 -> ~103 bytes
 typedef struct channel_s {
@@ -164,6 +163,10 @@ private:
   RecentNode *recentHead = nullptr;
   RecentNode *recentTail = nullptr;
   byte recentLen = 0; // max MAX_RECENT_SIZE
+
+  //! TODO https://dsp.stackexchange.com/q/20333
+  ulong runningSum = 0;
+  ulong runningSumN = 0; // number of entered vals
 
   // RECENT
   void addRecent(byte val) {
@@ -241,13 +244,14 @@ public:
 
   void setData(byte value) {
     addRecent(value);
-    _printAllRecent(Serial);
+    // _printAllRecent(Serial);
   }
 
   byte getData() const {
     return recentTail == nullptr ? 0 : recentTail->val;
   }
 
+  // HCI
   bool meetsHciRequirement(HciState hciState) const {
     switch (hciState) {
       case NORMAL:
@@ -267,11 +271,8 @@ public:
   // these methods assume provided ID is valid (A-Z)
   static channel_s *create(char id, const char *desc, byte descLen);
   static channel_s *channelForId(char id);
-  // static bool meetsHciRequirement(const channel_s *ch, HciState hciState);
   static channel_s *firstChannel(HciState hciState);
-  static channel_s *channelBefore(const channel_s *ch);
   static channel_s *channelBefore(const channel_s *ch, HciState hciState);
-  static channel_s *channelAfter(const channel_s *ch);
   static channel_s *channelAfter(const channel_s *ch, HciState hciState);
   static bool canGoUp(const channel_s *topChannel, HciState hciState);
   static bool canGoDown(const channel_s *topChannel, HciState hciState);
@@ -291,7 +292,7 @@ void messageError(char cmdId, char channelId);
 void messageError(char cmdId, char channelId, const String &rest);
 void printRestOfMessage();
 // handling button presses (main)
-// TODO
+//? TODO
 // display
 void displayChannel(uint8_t row, Channel *ch);
 void clearChannelRow(uint8_t row);
@@ -302,8 +303,10 @@ void selectDisplay();
 String rightJustify3Digits(uint num);
 void skipLine(Stream &s);
 // debug
+void _printChannelIds(Print &p, const Channel *head);
 void _printChannel(Print &p, const Channel *ch, bool newLine = true);
-
+void _printChannelsFull(Print &p, Channel* head);
+void _printHciState(HciState hciState);
 
 Channel *Channel::headChannel = nullptr;
 
@@ -331,15 +334,19 @@ void Channel::insertChannel(Channel *ch) {
 Channel *Channel::create(char id, const char *desc, byte descLen) {
   Channel *ch = Channel::channelForId(id);
 
+  DEBUG(id);
   if (ch == nullptr) {
-    Serial.print(F("DEBUG: Making new channel with id "));
-    Serial.println(id);
-    // shouldn't free/delete because 'all channels will be used'
+    Serial.print(F("new channel made "));
+    // don't need to free/delete because 'all channels will be used'
     ch = new Channel(id, desc, descLen);
     insertChannel(ch);
   } else {
+    Serial.print(F("updated "));
     ch->setDescription(desc, descLen);
   }
+  Serial.print(F("desc = {"));
+  Serial.print(desc);
+  Serial.println('}');
 
   return ch;
 }
@@ -368,25 +375,9 @@ Channel *Channel::firstChannel(HciState hciState) {
   return nullptr;
 }
 
-// TODO: remove once overload with hciState is done
-Channel *Channel::channelBefore(const Channel *ch) {
-  if (ch == headChannel)
-    return nullptr;
-
-  Channel *node = headChannel;
-
-  while (node->next != nullptr) {
-    if (node->next == ch)
-      return node;
-    node = node->next;
-  }
-
-  return nullptr;
-}
-
 Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
-  //! TODO: REMOVE once this impl is done
-  // return channelBefore(ch);
+  if (ch == nullptr)
+    return nullptr;
 
   Channel *head = firstChannel(hciState);
 
@@ -396,21 +387,19 @@ Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
   Channel *prev = head;
 
   while (prev != nullptr) {
-    Channel *node = channelAfter(prev, hciState);
-    if (node == ch)
+    Channel *next = channelAfter(prev, hciState);
+    if (next == ch)
       return prev;
-    prev = node;
+    prev = next;
   }
 
   return nullptr;
 }
 
-// TODO: use overload with hciState instead
-Channel *Channel::channelAfter(const Channel *topChannel) {
-  return topChannel == nullptr ? nullptr : topChannel->next;
-}
-
 Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
+  if (ch == nullptr)
+    return nullptr;
+
   Channel *next = ch->next;
 
   if (hciState == NORMAL) {
@@ -418,11 +407,8 @@ Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
   }
 
   while (next != nullptr) {
-    if (next->meetsHciRequirement(hciState)) {
-      _printChannel(Serial, next);
-      // Serial.println(next->id);
+    if (next->meetsHciRequirement(hciState))
       return next;
-    }
     next = next->next;
   }
 
@@ -430,7 +416,7 @@ Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
 }
 
 bool Channel::canGoUp(const Channel *topChannel, HciState hciState) {
-  if (topChannel == headChannel)
+  if (topChannel == nullptr || topChannel == headChannel)
     return false;
 
   if (hciState == NORMAL)
@@ -438,28 +424,25 @@ bool Channel::canGoUp(const Channel *topChannel, HciState hciState) {
 
   Channel *node = headChannel;
 
-  // try and find any node before topChannel that meets hciState's requirement
+  // try and find ANY node before topChannel that meets hciState's requirement
   while (node != nullptr) {
     if (node->meetsHciRequirement(hciState))
       return true;
+
+    // early exit if reached topChannel
     if (node->next == topChannel)
       break;
+
+    node = node->next;
   }
 
   return false;
-
-  // TODO? this should work
-  // return channelBefore(topChannel, hciState) != nullptr;
 }
 
 bool Channel::canGoDown(const Channel *topChannel, HciState hciState) {
-  // TODO? this may work
-  if (topChannel == nullptr || topChannel->next == nullptr)
-    return false;
-
-  Channel *bottom = channelAfter(topChannel, hciState);
-
-  return channelAfter(bottom, hciState) != nullptr;
+  // channelAfter & channelBefore handle nullptr
+  Channel *btmChannel = channelAfter(topChannel, hciState);
+  return channelAfter(btmChannel, hciState) != nullptr;
 }
 
 /* globals */
@@ -512,13 +495,6 @@ namespace FREERAM {
     lcd.print(F("Free bytes:"));
     lcd.print(freeMemory());
   }
-}
-
-/*
-? maybe change topChannel to channel ID (char)
-*/
-namespace HCI {
-  // TODO
 }
 
 /*
@@ -698,22 +674,11 @@ void setup() {
   lcd.createChar(DOWN_ARROW_CHAR, downChevron);
 }
 
-// debug
-void _printHciState(HciState hciState) {
-  Serial.print(F("DEBUG: HciState: "));
-  if (hciState == NORMAL) {
-    Serial.println(F("NORMAL"));
-  } else if (hciState == LEFT_MIN) {
-    Serial.println(F("LEFT_MIN"));
-  } else {
-    Serial.println(F("RIGHT_MAX"));
-  }
-}
-
 void loop() {
   static State state = INITIALISATION;
+  // HCI
   static HciState hciState = NORMAL;
-  static Channel *topChannel; // btmChannel ~= topChannel->next
+  static Channel *topChannel;
   static ulong selectPressTime;
 
   uint8_t b;
@@ -773,17 +738,17 @@ void loop() {
       state = DOWN_PRESSED;
 
     } else if (b & BUTTON_LEFT) {
-      Serial.println(F("DEBUG: LEFT pressed"));
       // HCI
+      Serial.println(F("DEBUG: LEFT pressed"));
       hciState = (hciState == LEFT_MIN) ? NORMAL : LEFT_MIN;
       _printHciState(hciState);
       // 'reset' topChannel (get first channel that meets hcistate)
       topChannel = Channel::firstChannel(hciState);
       state = LEFT_PRESSED;
 
-    } else if (b & BUTTON_RIGHT){
-      Serial.println(F("DEBUG: RIGHT pressed"));
+    } else if (b & BUTTON_RIGHT) {
       // HCI
+      Serial.println(F("DEBUG: RIGHT pressed"));
       hciState = (hciState == RIGHT_MAX) ? NORMAL : RIGHT_MAX;
       _printHciState(hciState);
       // 'reset' topChannel
@@ -901,15 +866,11 @@ void readCreateCommand(Channel **topChannelPtr) {
     skipLine(Serial);
   }
 
-  Serial.print(F("DEBUG: DESC: ["));
-  Serial.print(desc);
-  Serial.println(']');
-
   Channel *ch = Channel::create(channelId, desc, descLen);
 
   // if creating first channel
   if (*topChannelPtr == nullptr) {
-    Serial.println(F("DEBUG: FIRST CHANNEL MADE"));
+    Serial.println(F("DEBUG: ^ was first channel"));
     *topChannelPtr = ch;
   }
 
@@ -917,7 +878,9 @@ void readCreateCommand(Channel **topChannelPtr) {
 }
 
 void readValueCommand(char cmdId) {
-  if (Serial.available() < 2 || Serial.available() > MAX_CMD_LENGTH - 1)
+  int available = Serial.available();
+  // add 1 because of trailing \n
+  if (available < 2 + 1 || available > MAX_CMD_LENGTH - 1 + 1)
     return messageError(cmdId);
 
   char channelId = Serial.read();
@@ -938,17 +901,25 @@ void readValueCommand(char cmdId) {
   if (ch == nullptr)
     return;
 
+  DEBUG(channelId);
+  Serial.print("");
+
   switch (cmdId) {
     case 'V':
+      Serial.print(F("data"));
       ch->setData(value);
       break;
     case 'X':
+      Serial.print(F("max"));
       ch->max = value;
       break;
     case 'N':
+      Serial.print(F("min"));
       ch->min = value;
       break;
   }
+  Serial.print(F(" = "));
+  Serial.println(value);
 
   _EEPROM::updateEEPROM(ch);
 }
@@ -990,7 +961,11 @@ void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(ch->id);
   lcd.setCursor(DATA_POSITION, row);
-  lcd.print(rightJustify3Digits(ch->getData()));
+  //! TODO: update depending on answer to question
+  if (ch->valueHasBeenSet())
+    lcd.print(rightJustify3Digits(ch->getData()));
+  else
+    lcd.print(F("   "));
 
   // RECENT
   lcd.setCursor(RECENT_POSITION, row);
@@ -1017,23 +992,15 @@ void updateDisplay(Channel *const topChannel, HciState hciState) {
   UDCHARS::displayDownArrow(Channel::canGoDown(topChannel, hciState));
 
   if (topChannel != nullptr) {
-    Serial.print(F("TOP: "));
-    Serial.println(topChannel->id);
     displayTopChannel(topChannel);
   } else {
-    Serial.println(F("TOP: NONE"));
     clearChannelRow(TOP_LINE);
   }
 
   Channel *const btmChannel = Channel::channelAfter(topChannel, hciState);
   if (btmChannel != nullptr) {
-    //!
-    Serial.print(F("BTM: "));
-    Serial.println(btmChannel->id);
     displayBottomChannel(btmChannel);
   } else {
-    //!
-    Serial.println(F("BTM: NONE"));
     clearChannelRow(BOTTOM_LINE);
   }
 }
@@ -1164,6 +1131,19 @@ void _printChannelsFull(Print &p, Channel* head) {
 
   p.println(F("DEBUG: ]"));
 }
+
+// debug HCI
+void _printHciState(HciState hciState) {
+  Serial.print(F("DEBUG: HciState: "));
+  if (hciState == NORMAL) {
+    Serial.println(F("NORMAL"));
+  } else if (hciState == LEFT_MIN) {
+    Serial.println(F("LEFT_MIN"));
+  } else {
+    Serial.println(F("RIGHT_MAX"));
+  }
+}
+
 
 /*
 TODO
