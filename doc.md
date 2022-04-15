@@ -5,8 +5,8 @@ author: _F120840_
 date: Semester 2
 ---
 
-* *In this template delete all the text in italics and replace with your
-  own as appropriate.*
+**_In this template delete all the text in italics and replace with your
+  own as appropriate._**
 
 ## FSMs
 
@@ -31,8 +31,11 @@ date: Semester 2
 - SELECT_AWAITING_RELEASE
   - waiting for select button to be released
 
+![Main FSM alt text](main_fsm.png "Main FSM")
 
 * *If there are other (sub) FSMs in your code then indicate those here.*
+
+There are other FSMs in my code, they are in extensions. (tryna say to look at extensions part).
 
 ## Data structures
 
@@ -45,18 +48,18 @@ Channels are implemented as an ordered singly-linked-list (ordered by channel ID
 
 | Type | Name | Description |
 | --- | --- | --- |
-| char | id | The channel's ID (A-Z) |
-| const char* | desc | The channel's description/name/title (max. 15 chars) |
-| byte | descLen | The length of the channel's description |
-| byte | max | The channel's maximum |
-| byte | min | The channel's minimum |
-| channel_s* | next | Pointer to the next created channel |
+| char | id | This channel's ID (A-Z) |
+| const char* | desc | This channel's description/name/title (max. 15 chars) |
+| byte | descLen | The length of this channel's description |
+| byte | max | This channel's maximum |
+| byte | min | This channel's minimum |
+| channel_s* | next | Pointer to the next created channel (by ID) |
 | byte | scrollIndex | SCROLL: the start index of the currently displayed description |;
-| ulong | lastScrollTime | SCROLL: the time the description was last scrolled |;
+| unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |;
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
-| RecentNode* | recentHead | The head of the RECENT linked list |
-| RecentNode* | recentTail | The tail of the RECENT linked list |
-| byte | recentLen | The number of recent values currently stored. |
+| RecentNode* | recentHead | RECENT: the head of the RECENT linked list for this channel |
+| RecentNode* | recentTail | RECENT: the tail of the RECENT linked list for this channel |
+| byte | recentLen | RECENT: the number of recent values currently stored |
 
 The head of this linked list is stored statically in `Channel::headChannel` and globally (as a reference) in `headChannel`. When a new channel is created using `Channel::create`, the linked list is updated using `Channel::insertChannel`, which will insert the new channel into the appropriate position, according to the channel's ID.
 
@@ -65,8 +68,8 @@ The head of this linked list is stored statically in `Channel::headChannel` and 
 
 | Function | Description |
 | --- | --- |
-| `Channel::create(char, char*, byte)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
-| `Channel::insertChannel(Channel*)` | Inserts the given channel into the linked list of channels in its appropriate position |
+| `Channel::create(char id, const char* desc, byte descLen)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
+| `Channel::insertChannel(Channel* ch)` | Inserts the given channel into the linked list of channels in its appropriate position |
 
 ## Debugging
 
@@ -74,14 +77,14 @@ The head of this linked list is stored statically in `Channel::headChannel` and 
   managed by C macros, then keep this in your submission.  If you have
   other things to say, then put them here.*
 
-Debug functions generally start with `_`, and are commented with `// debug`.
+Debug functions generally start with '`_`', and are commented with '`// debug`'.
 
 ## Reflection
 
 * *200–500 words of reflection on your code.  Include those things that
   don’t work as well as you would like and how you would fix them.*
 
-I am very happy with my code. I think I thought of some ingenious solutions to some problems, such as managing the 64 most recent values and managing channels - using linkedlists is more memory friendly, at least initially. I believe everything works as desired.
+I am very happy with my code. I think I thought of some ingenious solutions to some problems, such as managing the 64 most recent values and managing channels - using linkedlists is more memory friendly, at least initially, than using arrays. I believe everything works as desired.
 
 Though I am unhappy that I mixed C & C++ constructs and didn't necessarily try to stick to one.
 
@@ -107,6 +110,8 @@ It was simple to implement as it was something done very early.
 
 *Write about this extension*
 
+*In documentation, indicate which lines display the free SRAM*
+
 Lines ?-? display the amount of free SRAM.
 
 It was simple to implement as it was done in the Week 3 lab.
@@ -115,7 +120,15 @@ It was simple to implement as it was done in the Week 3 lab.
 
 *Write about this extension*
 
+*In documentation, show LoC and thinking behind mechanism to display subsets of list of channels*
+
+HCI is implemented using a finite state machine:
+
+![HCI FSM alt text](hci_fsm.png "HCI FSM")
+
 ## EEPROM
+
+*In documentation, indicate how lay out use of EEPROM, which LoC and functions I use to store information*
 
 Each channel occupies 19 bytes in the EEPROM:
 
@@ -135,18 +148,22 @@ I use the namespace `_EEPROM` for all functions relating to using the EEPROM, na
 
 ## RECENT
 
-I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value.
+*In documentation, indicate the names and locations of the data structures used to store the recent values*
 
-`Channel::recentHead` stores the head of the linkedlist, and can be used for all list-related operations.
+*running sum?*
 
-Another way this could be implemented is using a byte array (`byte[64]`) and keeping track of:
+I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value to manage the most recent values for a channel.
+
+`Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
+
+Alternativity, this could be implemented using a circular byte array (`byte[64]`) and keeping track of:
 - the index of the oldest value
 - the number of values that have been entered
 
 e.g.
 
-```c++
-byte recents[64];
+```arduino
+byte recents[64] = {0}; // initialiser to zero entire array
 byte nRecents = 0; // max 64
 byte oldestIndex = 0; // 0-63
 
@@ -163,8 +180,14 @@ void addRecent(byte val) {
   }
 }
 
-uint calculateAverage() {
-  ...
+unsigned int calculateAverage() {
+  unsigned int sum = 0;
+
+  for (byte i = 0; i < nRecents; i++) {
+    sum += recents[i];
+  }
+
+  return round(sum / nRecents);
 }
 ```
 
@@ -174,19 +197,23 @@ But I think using a linked-list should be more memory-efficient, at least for a 
 
 *Write about this extension*
 
+*In documentation, indicate data structure used to store the channel name and how it is printed to the display*
+
 indicate data structure used to store the channel name and how it is printed to the display
 
-A `const char*` is used to store the channel description/name. The first 6 letters are displayed (the description is truncated) by only printing the first 6. characters instead of the entire thing.
+A channel's description/name is stored in a `const char*`.It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the description previously displayed.
 
 ## SCROLL
 
 *Write about this extension*
 
+*In documentation, highlight parts of FSM required for this particular requirement and the LoC and functions that carry this implementation*
+
 SCROLL and NAMES are implemented together as they go hand-in-hand.
 
-It is implemented using a simple FSM (flowchart):
+It is implemented using a simple FSM:
 
-[insert](..)
+![SCROLL FSM alt text](scroll_fsm.png "SCROLL FSM")
 
 
 ## Submission
