@@ -37,10 +37,11 @@
 #define displayTopChannel(ch)    displayChannel(TOP_LINE, ch)
 #define displayBottomChannel(ch) displayChannel(BOTTOM_LINE, ch)
 
-#define isCreateCommand(cmdId) ((cmdId) == 'C')
-#define isValueCommand(cmdId)  ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
-#define isOutOfByteRange(value)    ((value) < 0 || (value) > 255)
+#define isCreateCommand(cmdId)  ((cmdId) == 'C')
+#define isValueCommand(cmdId)   ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
+#define isOutOfByteRange(value) ((value) < 0 || (value) > 255)
 
+//? TODO: decide if want this name basically
 #define DEBUG(channelId) Serial.print(F("DEBUG: ")); Serial.print(channelId); Serial.print(F(" - "));
 
 #define MAX_DESC_LENGTH  15
@@ -68,7 +69,7 @@ typedef enum {
   SYNCHRONISATION,
   AFTER_SYNC,
   MAIN, // basically AWAITING_MESSAGE and AWAITING_PRESS
-  SELECT_IS_HELD,
+  SELECT_HELD,
   SELECT_AWAITING_RELEASE,
   UP_PRESSED,
   DOWN_PRESSED,
@@ -77,7 +78,6 @@ typedef enum {
   RIGHT_PRESSED,
 } State;
 
-// affect get_bottom
 typedef enum {
   NORMAL,
   LEFT_MIN,
@@ -677,7 +677,7 @@ void setup() {
 void loop() {
   static State state = INITIALISATION;
   // HCI
-  static HciState hciState = NORMAL;
+  static HciState hciState;
   static Channel *topChannel;
   static ulong selectPressTime;
 
@@ -685,7 +685,7 @@ void loop() {
 
   switch (state) {
   case INITIALISATION:
-    // topChannel = headChannel = nullptr;
+    hciState = NORMAL;
     topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
     state = SYNCHRONISATION;
@@ -709,7 +709,6 @@ void loop() {
     Serial.println(IMPLEMENTED_EXTENSIONS);
 
     // EEPROM
-    // topChannel = headChannel = _EEPROM::readEEPROM();
     topChannel = Channel::headChannel = _EEPROM::readEEPROM();
     Serial.println(F("DEBUG: Channels stored in EEPROM:"));
     _printChannelsFull(Serial, topChannel);
@@ -723,7 +722,7 @@ void loop() {
     if (b & BUTTON_SELECT) {
       Serial.println(F("DEBUG: SELECT pressed"));
       selectPressTime = millis();
-      state = SELECT_IS_HELD;
+      state = SELECT_HELD;
 
     } else if (b & BUTTON_UP) {
       Serial.println(F("DEBUG: UP pressed"));
@@ -761,7 +760,7 @@ void loop() {
     updateDisplay(topChannel, hciState);
     break;
 
-  case SELECT_IS_HELD:  // select is currently being held, waiting to reach 1 second
+  case SELECT_HELD:  // select is currently being held, waiting to reach 1 second
     // if select has been held for 1 second
     if (millis() - selectPressTime >= SELECT_TIMEOUT) {
       Serial.println(F("DEBUG: SELECT has been held for 1s"));
@@ -780,8 +779,10 @@ void loop() {
     }
     break;
 
-  //* maybe make a SelectState
-  //* or DisplayState - I think this makes more sense (NORMAL, SELECT)
+  //* maybe make a DisplayState - I think this makes more sense (NORMAL, SELECT)
+  // not sure about this cos it'll keep changing display for select(?) as in keep
+  // calling selectDisplay(), not really a problem tho i think but im a bit :shrug: :grimace:
+  // about it
   case SELECT_AWAITING_RELEASE:  // select is currently being held (has already been held for 1+ second)
     Serial.println(F("DEBUG: Awaiting SELECT release"));
     // if SELECT has been released
