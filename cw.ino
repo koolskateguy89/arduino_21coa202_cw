@@ -4,7 +4,11 @@
 #include <EEPROM.h>
 #include <avr/eeprom.h>
 
-#define STUDENT_ID             F("    F120840     ")
+// implementation flags
+#define STORE_RECENT_VALUES true // RECENT
+#define DEBUG true
+
+#define STUDENT_ID             "F120840"
 #define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,HCI,EEPROM,RECENT,NAMES,SCROLL")
 
 #define BL_OFF   0
@@ -24,8 +28,6 @@
 
 #define TOP_LINE       0
 #define BOTTOM_LINE    1
-#define TOP_CURSOR     0, TOP_LINE
-#define BOTTOM_CURSOR  0, BOTTOM_LINE
 
 // column
 #define ARROW_POSITION   0
@@ -41,15 +43,25 @@
 #define isValueCommand(cmdId)   ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
 #define isOutOfByteRange(value) ((value) < 0 || (value) > 255)
 
-//? TODO: decide if want this name basically
-#define DEBUG(channelId) Serial.print(F("DEBUG: ")); Serial.print(channelId); Serial.print(F(" - "));
-
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
 
-// RECENT
-#define MAX_RECENT_SIZE 64
+#if defined(DEBUG) && DEBUG
+#define debug_print(x) Serial.print(x)
+#define debug_println(x) Serial.println(x)
+#else
+#define debug_print(x) do {} while(0)
+#define debug_println(x) do {} while(0)
+#endif
+#define DEBUG_ID(channelId) debug_print(F("DEBUG: ")); debug_print(channelId); debug_print(F(" - "));
+#define boolstr(b) (b ? F("true") : F("false"))
 
+// RECENT
+#if STORE_RECENT_VALUES
+#define MAX_RECENT_SIZE 64
+#else
+// #define ALPHA 47.0
+#endif
 
 // FREERAM, lab sheet 5
 #ifdef __arm__
@@ -136,20 +148,15 @@ typedef struct channel_s {
     scrollState = SCROLL_START;
   }
 
-  bool valueHasBeenSet() const {
-    return recentTail != nullptr;
-  }
-
+private:
   // RECENT
+#if STORE_RECENT_VALUES
   /*
   was difficult to think of how to impl RECENT!
   basic singly-linked-list with only tail addition (polling? is that the term)
   but with a max size, which once reached, adding will discard head value
   it's a Queue! FIFO
-
-  maybe use running sum
   */
-private:
   typedef struct node_s {
     node_s(byte val) {
       this->val = val;
@@ -163,10 +170,6 @@ private:
   RecentNode *recentHead = nullptr;
   RecentNode *recentTail = nullptr;
   byte recentLen = 0; // max MAX_RECENT_SIZE
-
-  //! TODO https://dsp.stackexchange.com/q/20333
-  ulong runningSum = 0;
-  ulong runningSumN = 0; // number of entered vals
 
   // RECENT
   void addRecent(byte val) {
@@ -192,18 +195,110 @@ private:
   }
 
   // debug - to help check if old recentHead gets deleted once reached max size
-  // bool _addedSixty = false;
-  // void _addSixtyRecentsOnce() {
-  //   if (!_addedSixty) {
-  //     for (uint i = 0; i < 60; i++)
-  //       addRecent(random(0, 256));
-  //     _addedSixty = true;
-  //   }
-  // }
+  bool _addedSixty = false;
+  void _addSixtyRecentsOnce() {
+    if (!_addedSixty) {
+      for (uint i = 0; i < 60; i++)
+        addRecent(random(0, 256));
+      _addedSixty = true;
+    }
+  }
+
+  // debug
+  void _printAllRecent() const {
+    debug_print(F("DEBUG: "));
+    debug_print(id);
+    debug_print(F(" r_len="));
+    debug_print(recentLen);
+    debug_print(F(", ["));
+
+    if (recentHead == nullptr) {
+      debug_println(']');
+      return;
+    }
+
+    debug_print(recentHead->val);
+    RecentNode *node = recentHead->next;
+    while (node != nullptr) {
+      debug_print(',');
+      debug_print(node->val);
+      node = node->next;
+    }
+
+    debug_print(']');
+  }
+#else
+  /*
+   * Use an exponential moving average (https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average)
+   * inspired by answers to https://dsp.stackexchange.com/q/20333
+   */
+  byte data;
+  double runningAvrg = 0;
+  ulong runningSumN = 0; // number of entered vals
+  static constexpr double ALPHA = 47;
+
+  void addRunningAvrg(byte val) {
+    // y[n] = α x[n] + (1−α) y[n−1]
+    /*
+     * before 64 values have been entered, each value will weigh: 1 / (runningSumN + 1)
+     *   so when runningSumN == 0:
+     *            weight = 1
+     *         runningSumN == 1:
+     *            weight = 1/2
+     *         etc.
+     *   so runningAvrg should be very accurate/precise
+     *
+     * once 64 values have been entered, each value will weigh 1/64 which I think makes sense
+     *
+     * 1/46, 1/48, 1/44 are actual best
+     * 1/47 is best, avrg diff of ~3.25 (2dp) - for high number of values
+     *
+     * mid 50s best for lower number ~100
+     * midhigh 40s best for higher number ~3_000_000 / 300
+     */
+    // the weighting for the new value
+    double alpha;
+    if (runningSumN < 64) {
+      alpha = 1.0 / (runningSumN + 1);
+    } else {
+      alpha = 1.0 / ALPHA;
+    }
+
+    runningAvrg = alpha * val + (1 - alpha) * runningAvrg;
+    runningSumN++;
+  }
+#endif
 
 public:
-  // RECENT
+  bool valueHasBeenSet() const {
+#if STORE_RECENT_VALUES
+    return recentTail != nullptr;
+#else
+    return runningSumN > 0;
+#endif
+  }
+
+  void setData(byte value) {
+#if STORE_RECENT_VALUES
+    addRecent(value);
+    // _printAllRecent();
+#else
+    data = value;
+    addRunningAvrg(value);
+#endif
+  }
+
+  byte getData() const {
+#if STORE_RECENT_VALUES
+    return recentTail == nullptr ? 0 : recentTail->val;
+#else
+    return data;
+#endif
+  }
+
+    // RECENT
   byte getAverageValue() const {
+#if STORE_RECENT_VALUES
     if (recentHead == nullptr || recentLen == 0)
       return 0;
 
@@ -216,39 +311,9 @@ public:
     }
 
     return round(sum / recentLen);
-  }
-
-  // debug
-  void _printAllRecent(Print &p) const {
-    p.print(F("DEBUG: "));
-    p.print(id);
-    p.print(F(" r_len="));
-    p.print(recentLen);
-    p.print(F(", ["));
-
-    if (recentHead == nullptr) {
-      p.println(']');
-      return;
-    }
-
-    p.print(recentHead->val);
-    RecentNode *node = recentHead->next;
-    while (node != nullptr) {
-      p.print(',');
-      p.print(node->val);
-      node = node->next;
-    }
-
-    p.println(']');
-  }
-
-  void setData(byte value) {
-    addRecent(value);
-    // _printAllRecent(Serial);
-  }
-
-  byte getData() const {
-    return recentTail == nullptr ? 0 : recentTail->val;
+#else
+    return round(runningAvrg);
+#endif
   }
 
   // HCI
@@ -297,15 +362,15 @@ void printRestOfMessage();
 void displayChannel(uint8_t row, Channel *ch);
 void clearChannelRow(uint8_t row);
 void updateDisplay(Channel *topChannel, HciState hciState);
-void updateBacklight(HciState hciState);
+void updateBacklight();
 void selectDisplay();
 // utils
 String rightJustify3Digits(uint num);
 void skipLine(Stream &s);
 // debug
-void _printChannelIds(Print &p, const Channel *head);
-void _printChannel(Print &p, const Channel *ch, bool newLine = true);
-void _printChannelsFull(Print &p, Channel* head);
+void _printChannelIds(const Channel *head);
+void _printChannel(const Channel *ch, bool newLine = true);
+void _printChannelsFull(Channel* head);
 void _printHciState(HciState hciState);
 
 Channel *Channel::headChannel = nullptr;
@@ -334,19 +399,19 @@ void Channel::insertChannel(Channel *ch) {
 Channel *Channel::create(char id, const char *desc, byte descLen) {
   Channel *ch = Channel::channelForId(id);
 
-  DEBUG(id);
+  DEBUG_ID(id);
   if (ch == nullptr) {
-    Serial.print(F("new channel made "));
+    debug_print(F("new channel made, "));
     // don't need to free/delete because 'all channels will be used'
     ch = new Channel(id, desc, descLen);
     insertChannel(ch);
   } else {
-    Serial.print(F("updated "));
+    debug_print(F("updated "));
     ch->setDescription(desc, descLen);
   }
-  Serial.print(F("desc = {"));
-  Serial.print(desc);
-  Serial.println('}');
+  debug_print(F("desc = {"));
+  debug_print(desc);
+  debug_println('}');
 
   return ch;
 }
@@ -499,39 +564,55 @@ namespace FREERAM {
 
 /*
  *
- * Each channel occupies 19 bytes in EEPROM:
+ * Each channel occupies 26 bytes in EEPROM:
  * 1 id
  * 1 max
  * 1 min
  * 1 desc_length
  * 15 desc
-
- * I think I still might need some other error-checking mechanism
+ * 7 my student ID
+ *
+ * there are multiple ways to 'invalidate' a channel stored in the EEPROM:
+ *  - update the stored student ID to not be my student ID
+ *  -    "    "     "   channel ID to not be that channel's ID
+ *  -    "    "     "   description length to be greater than 15
+ *
  */
 namespace _EEPROM {
-  #define addressForId(id)   ((id - 'A') * 19)
-  #define maxOffset(idAddr)  (idAddr + 1)
-  #define minOffset(idAddr)  (idAddr + 2)
-  #define descOffset(idAddr) (idAddr + 3)
+  #define addressForId(id)        ((id - 'A') * 26)
+  #define maxOffset(idAddr)       (idAddr + 1)
+  #define minOffset(idAddr)       (idAddr + 2)
+  #define descOffset(idAddr)      (idAddr + 3)
+  #define studentIdOffset(idAddr) (idAddr + 18)
 
   void updateEEPROM(const Channel *ch);
   Channel *readEEPROM();
 
   namespace {
-    void writeString(int offset, const char *desc, byte len) {
+    void writeDesc(int offset, const char *desc, byte len) {
       EEPROM.update(offset, len);
       eeprom_update_block(desc, (void*) (offset + 1), len);
     }
 
-    void readString(int offset, char *desc, byte len) {
-      eeprom_read_block(desc, (void*) offset, len);
-      desc[ len ] = '\0';
+    void readString(int addr, char *str, byte len) {
+      eeprom_read_block(str, (void*) addr, len);
+      str[ len ] = 0;
+    }
+
+    //! TODO: comment about validation using student id
+    bool channelHasValidStudentId(char id) {
+      char readStudentId[8];
+      readString(studentIdOffset(addressForId(id)), readStudentId, 7);
+      return strcmp(readStudentId, STUDENT_ID) == 0;
     }
 
     Channel *readChannel(char id) {
+      if (!channelHasValidStudentId(id))
+        return nullptr;
+
       const uint idAddr = addressForId(id);
 
-      // basic verification
+      // basic verification using channel ID
       if (EEPROM[ idAddr ] != id)
         return nullptr;
 
@@ -565,7 +646,9 @@ namespace _EEPROM {
     EEPROM.update(maxOffset(addr), ch->max);
     EEPROM.update(minOffset(addr), ch->min);
 
-    writeString(descOffset(addr), ch->desc, ch->descLen);
+    writeDesc(descOffset(addr), ch->desc, ch->descLen);
+    // write my student ID next to channel data for persistence validation(?)
+    eeprom_update_block(STUDENT_ID, (void*) studentIdOffset(addr), 7);
   }
 
   // returns the head channel
@@ -587,22 +670,23 @@ namespace _EEPROM {
     return head;
   }
 
+  /*
   // debug - will cause reading that id to return nullptr
-  void invalidate(char id) {
+  void _invalidateChannel(char id) {
     EEPROM.update(addressForId(id), 0);
   }
 
   // debug
-  void invalidateAll() {
+  void _invalidateEEPROM() {
     for (char id = 'A'; id <= 'Z'; id++)
       EEPROM.update(addressForId(id), 0);
   }
-
+  */
 }
 
-// NAMES and SCROLL together, it makes sense
+// NAMES and SCROLL together
 /*
- * [currently] Uses a FSM to manage scrolling state, uses Channel variables
+ * Uses a FSM to manage scrolling state, uses Channel variables
  * scrollState, scrollIndex & lastScrollTime.
  */
 namespace NAMES_SCROLL {
@@ -668,9 +752,9 @@ void setup() {
   lcd.clear();
 
   // UDCHARS
-  byte upChevron[] = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
+  byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
   lcd.createChar(UP_ARROW_CHAR, upChevron);
-  byte downChevron[] = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
+  byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
   lcd.createChar(DOWN_ARROW_CHAR, downChevron);
 }
 
@@ -710,8 +794,8 @@ void loop() {
 
     // EEPROM
     topChannel = Channel::headChannel = _EEPROM::readEEPROM();
-    Serial.println(F("DEBUG: Channels stored in EEPROM:"));
-    _printChannelsFull(Serial, topChannel);
+    debug_println(F("DEBUG: Channels stored in EEPROM:"));
+    _printChannelsFull(topChannel);
 
     state = MAIN;
     break;
@@ -720,25 +804,25 @@ void loop() {
     b = lcd.readButtons();
 
     if (b & BUTTON_SELECT) {
-      Serial.println(F("DEBUG: SELECT pressed"));
+      debug_println(F("DEBUG: SELECT pressed"));
       selectPressTime = millis();
       state = SELECT_HELD;
 
     } else if (b & BUTTON_UP) {
-      Serial.println(F("DEBUG: UP pressed"));
+      debug_println(F("DEBUG: UP pressed"));
       if (Channel::canGoUp(topChannel, hciState))
         topChannel = Channel::channelBefore(topChannel, hciState);
       state = UP_PRESSED;
 
     } else if (b & BUTTON_DOWN) {
-      Serial.println(F("DEBUG: DOWN pressed"));
+      debug_println(F("DEBUG: DOWN pressed"));
       if (Channel::canGoDown(topChannel, hciState))
         topChannel = Channel::channelAfter(topChannel, hciState);
       state = DOWN_PRESSED;
 
     } else if (b & BUTTON_LEFT) {
       // HCI
-      Serial.println(F("DEBUG: LEFT pressed"));
+      debug_println(F("DEBUG: LEFT pressed"));
       hciState = (hciState == LEFT_MIN) ? NORMAL : LEFT_MIN;
       _printHciState(hciState);
       // 'reset' topChannel (get first channel that meets hcistate)
@@ -747,7 +831,7 @@ void loop() {
 
     } else if (b & BUTTON_RIGHT) {
       // HCI
-      Serial.println(F("DEBUG: RIGHT pressed"));
+      debug_println(F("DEBUG: RIGHT pressed"));
       hciState = (hciState == RIGHT_MAX) ? NORMAL : RIGHT_MAX;
       _printHciState(hciState);
       // 'reset' topChannel
@@ -760,21 +844,21 @@ void loop() {
     updateDisplay(topChannel, hciState);
     break;
 
-  case SELECT_HELD:  // select is currently being held, waiting to reach 1 second
+  // select is currently being held, waiting to reach 1 second
+  case SELECT_HELD:
     // if select has been held for 1 second
     if (millis() - selectPressTime >= SELECT_TIMEOUT) {
-      Serial.println(F("DEBUG: SELECT has been held for 1s"));
+      debug_println(F("DEBUG: SELECT has been held for 1s"));
       lcd.clear();
       selectDisplay();
       state = SELECT_AWAITING_RELEASE;
     } else {
       // if select has been released
       if (!(lcd.readButtons() & BUTTON_SELECT)) {
-        Serial.println(F("DEBUG: SELECT released before 1s"));
-        //? might need like sub-state is main own FSM...
+        debug_println(F("DEBUG: SELECT released before 1s"));
         state = MAIN;
       } else {
-        Serial.println(F("DEBUG: Timeout until SELECT held for 1s"));
+        debug_println(F("DEBUG: Timeout until SELECT held for 1s"));
       }
     }
     break;
@@ -783,13 +867,13 @@ void loop() {
   // not sure about this cos it'll keep changing display for select(?) as in keep
   // calling selectDisplay(), not really a problem tho i think but im a bit :shrug: :grimace:
   // about it
-  case SELECT_AWAITING_RELEASE:  // select is currently being held (has already been held for 1+ second)
-    Serial.println(F("DEBUG: Awaiting SELECT release"));
+  // wait until select is released
+  case SELECT_AWAITING_RELEASE:
+    debug_println(F("DEBUG: Awaiting SELECT release"));
     // if SELECT has been released
     if (!(lcd.readButtons() & BUTTON_SELECT)) {
-      Serial.println(F("DEBUG: SELECT released"));
+      debug_println(F("DEBUG: SELECT released"));
       lcd.clear();
-      //? might need to store like a sub-state if main is its own FSM?
       state = MAIN;
     }
 
@@ -799,7 +883,7 @@ void loop() {
   // wait until up is released
   case UP_PRESSED:
     if (!(lcd.readButtons() & BUTTON_UP)) {
-      Serial.println(F("DEBUG: UP released"));
+      debug_println(F("DEBUG: UP released"));
       state = MAIN;
     }
     break;
@@ -807,7 +891,7 @@ void loop() {
   // wait until down is released
   case DOWN_PRESSED:
     if (!(lcd.readButtons() & BUTTON_DOWN)) {
-      Serial.println(F("DEBUG: DOWN released"));
+      debug_println(F("DEBUG: DOWN released"));
       state = MAIN;
     }
     break;
@@ -815,7 +899,7 @@ void loop() {
   // wait until left is released?
   case LEFT_PRESSED:
     if (!(lcd.readButtons() & BUTTON_LEFT)) {
-      Serial.println(F("DEBUG: LEFT released"));
+      debug_println(F("DEBUG: LEFT released"));
       state = MAIN;
     }
     break;
@@ -823,7 +907,7 @@ void loop() {
   // wait until right is released?
   case RIGHT_PRESSED:
     if (!(lcd.readButtons() & BUTTON_RIGHT)) {
-      Serial.println(F("DEBUG: RIGHT released"));
+      debug_println(F("DEBUG: RIGHT released"));
       state = MAIN;
     }
     break;
@@ -857,7 +941,7 @@ void readCreateCommand(Channel **topChannelPtr) {
 
   char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
   byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
-  desc[ descLen ] = '\0';
+  desc[ descLen ] = 0;
 
   if (descLen < MAX_DESC_LENGTH) {
     // reallocate a shorter buffer
@@ -871,7 +955,7 @@ void readCreateCommand(Channel **topChannelPtr) {
 
   // if creating first channel
   if (*topChannelPtr == nullptr) {
-    Serial.println(F("DEBUG: ^ was first channel"));
+    debug_println(F("DEBUG: ^ was first channel"));
     *topChannelPtr = ch;
   }
 
@@ -902,25 +986,24 @@ void readValueCommand(char cmdId) {
   if (ch == nullptr)
     return;
 
-  DEBUG(channelId);
-  Serial.print("");
+  DEBUG_ID(channelId);
+  debug_print(value);
+  debug_print(F(" = "));
 
   switch (cmdId) {
     case 'V':
-      Serial.print(F("data"));
+      debug_println(F("data"));
       ch->setData(value);
       break;
     case 'X':
-      Serial.print(F("max"));
+      debug_println(F("max"));
       ch->max = value;
       break;
     case 'N':
-      Serial.print(F("min"));
+      debug_println(F("min"));
       ch->min = value;
       break;
   }
-  Serial.print(F(" = "));
-  Serial.println(value);
 
   _EEPROM::updateEEPROM(ch);
 }
@@ -962,7 +1045,7 @@ void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(ch->id);
   lcd.setCursor(DATA_POSITION, row);
-  //! TODO: update depending on answer to question
+  // leave blank until value has been set
   if (ch->valueHasBeenSet())
     lcd.print(rightJustify3Digits(ch->getData()));
   else
@@ -982,11 +1065,11 @@ void displayChannel(uint8_t row, Channel *ch) {
 
 void clearChannelRow(uint8_t row) {
   lcd.setCursor(ID_POSITION, row);
-  lcd.print(F("                "));
+  lcd.print(F("               "));
 }
 
-void updateDisplay(Channel *const topChannel, HciState hciState) {
-  updateBacklight(hciState);
+void updateDisplay(Channel *topChannel, HciState hciState) {
+  updateBacklight();
 
   // UDCHARS,HCI
   UDCHARS::displayUpArrow(Channel::canGoUp(topChannel, hciState));
@@ -998,7 +1081,7 @@ void updateDisplay(Channel *const topChannel, HciState hciState) {
     clearChannelRow(TOP_LINE);
   }
 
-  Channel *const btmChannel = Channel::channelAfter(topChannel, hciState);
+  Channel *btmChannel = Channel::channelAfter(topChannel, hciState);
   if (btmChannel != nullptr) {
     displayBottomChannel(btmChannel);
   } else {
@@ -1012,16 +1095,15 @@ void updateDisplay(Channel *const topChannel, HciState hciState) {
 - Any number below min: green
 - If both: yellow
 */
-void updateBacklight(HciState hciState) {
+void updateBacklight() {
   // take advantage of the fact that YELLOW == RED | GREEN
   uint color = 0;
 
   Channel *ch = Channel::headChannel;
 
   while (ch != nullptr) {
-    // ignore channel if its value hasn't been set by a command, or it is
-    // being ignored because of current HCI state
-    if (!(ch->valueHasBeenSet() && ch->meetsHciRequirement(hciState))) {
+    // ignore channel if its value hasn't been set by a command
+    if (!ch->valueHasBeenSet()) {
       ch = ch->next;
       continue;
     }
@@ -1038,15 +1120,15 @@ void updateBacklight(HciState hciState) {
     ch = ch->next;
   }
 
-  color = color == 0 ? WHITE : color;
+  color = (color == 0) ? WHITE : color;
   lcd.setBacklight(color);
 }
 
 void selectDisplay() {
   lcd.setBacklight(PURPLE);
 
-  lcd.setCursor(TOP_CURSOR);
-  lcd.print(STUDENT_ID);
+  lcd.setCursor(4, TOP_LINE);
+  lcd.print(F(STUDENT_ID));
 
   // FREERAM
   FREERAM::displayFreeMemory();
@@ -1068,80 +1150,79 @@ void skipLine(Stream &s) {
 }
 
 // debug
-void _printChannelIds(Print &p, const Channel *head) {
-  p.print(F("DEBUG: channels=["));
+void _printChannelIds(const Channel *head) {
+  debug_print(F("DEBUG: channels=["));
 
   if (head == nullptr) {
-    p.println(']');
+    debug_println(']');
     return;
   }
 
-  p.print(head->id);
-  //_printChannel(Serial, head)
+  debug_print(head->id);
   Channel *node = head->next;
   while (node != nullptr) {
-    p.print(',');
-    p.print(node->id);
+    debug_print(',');
+    debug_print(node->id);
     node = node->next;
   }
 
-  p.println(']');
+  debug_println(']');
 }
 
 // debug
-void _printChannel(Print &p, const Channel *ch, bool newLine) {
-  p.print(F("DEBUG: Channel "));
-  p.print(ch->id);
+void _printChannel(const Channel *ch, bool newLine) {
+  debug_print(F("DEBUG: Channel "));
+  debug_print(ch->id);
 
-  p.print(F(", data="));
-  p.print(ch->getData());
+  debug_print(F(", data="));
+  debug_print(ch->getData());
 
-  p.print(F(", max="));
-  p.print(ch->max);
+  debug_print(F(", max="));
+  debug_print(ch->max);
 
-  p.print(F(", min="));
-  p.print(ch->min);
+  debug_print(F(", min="));
+  debug_print(ch->min);
 
-  p.print(F(", description={"));
-  p.print(ch->desc);
-  p.print('}');
-  p.print('@');
-  p.print((size_t) ch->desc);
+  debug_print(F(", description={"));
+  debug_print(ch->desc);
+  debug_print('}');
+  debug_print('@');
+  debug_print((size_t) ch->desc);
 
-  p.print(F(", descLen="));
-  p.print(ch->descLen);
+  debug_print(F(", descLen="));
+  debug_print(ch->descLen);
 
   if (newLine)
-    p.println();
+    debug_println();
 }
 
-void _printChannelsFull(Print &p, Channel* head) {
-  p.println(F("DEBUG: fullChannels = ["));
+void _printChannelsFull(Channel* head) {
+  debug_println(F("DEBUG: fullChannels = ["));
 
   if (head == nullptr) {
-    p.println(F("DEBUG: ]"));
+    debug_println(F("DEBUG: ]"));
     return;
   }
 
-  _printChannel(Serial, head);
+  _printChannel(head);
   Channel *node = head->next;
   while (node != nullptr) {
-    _printChannel(Serial, node);
+    _printChannel(node);
     node = node->next;
   }
 
-  p.println(F("DEBUG: ]"));
+  debug_println(F("DEBUG: ]"));
 }
 
 // debug HCI
 void _printHciState(HciState hciState) {
-  Serial.print(F("DEBUG: HciState: "));
+  debug_print(F("DEBUG: HciState: "));
   if (hciState == NORMAL) {
-    Serial.println(F("NORMAL"));
+    debug_println(F("NORMAL"));
   } else if (hciState == LEFT_MIN) {
-    Serial.println(F("LEFT_MIN"));
+    debug_println(F("LEFT_MIN"));
   } else {
-    Serial.println(F("RIGHT_MAX"));
+    debug_println(F("RIGHT_MAX"));
   }
 }
 
