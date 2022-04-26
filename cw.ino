@@ -4,9 +4,41 @@
 #include <EEPROM.h>
 #include <avr/eeprom.h>
 
+// RECENT: RECENT_MODE
+#define LL 0 // linked-list
+#define EMA 1 // exponential moving average
+
 // implementation flags
-#define STORE_RECENT_VALUES true // RECENT
 #define DEBUG true
+#define RECENT_MODE LL // RECENT: LL or EMA
+
+#ifndef DEBUG
+  #define DEBUG false
+#endif
+
+#ifndef RECENT_MODE
+  #error You must define a value for RECENT_MODE
+#endif
+
+#if DEBUG
+  #define debug_print(x) Serial.print(x)
+  #define debug_println(x) Serial.println(x)
+#else
+  #define debug_print(x) do {} while(0)
+  #define debug_println(x) do {} while(0)
+#endif
+
+#define DEBUG_ID(channelId) debug_print(F("DEBUG: ")); debug_print(channelId); debug_print(F(" - "));
+#define boolstr(b) ((b) ? F("true") : F("false"))
+
+// RECENT
+#if RECENT_MODE == LL
+  #define MAX_RECENT_SIZE 10 //! 10?
+#elif RECENT_MODE == EMA
+  #define ALPHA 47.0
+#else
+  #error RECENT_MODE is defined as an invalid value (LL/EMA)
+#endif
 
 #define STUDENT_ID             "F120840"
 #define IMPLEMENTED_EXTENSIONS F("UDCHARS,FREERAM,HCI,EEPROM,RECENT,NAMES,SCROLL")
@@ -45,23 +77,6 @@
 
 #define MAX_DESC_LENGTH  15
 #define MAX_CMD_LENGTH   5
-
-#if defined(DEBUG) && DEBUG
-#define debug_print(x) Serial.print(x)
-#define debug_println(x) Serial.println(x)
-#else
-#define debug_print(x) do {} while(0)
-#define debug_println(x) do {} while(0)
-#endif
-#define DEBUG_ID(channelId) debug_print(F("DEBUG: ")); debug_print(channelId); debug_print(F(" - "));
-#define boolstr(b) (b ? F("true") : F("false"))
-
-// RECENT
-#if STORE_RECENT_VALUES
-#define MAX_RECENT_SIZE 64
-#else
-// #define ALPHA 47.0
-#endif
 
 // FREERAM, lab sheet 5
 #ifdef __arm__
@@ -150,7 +165,7 @@ typedef struct channel_s {
 
 private:
   // RECENT
-#if STORE_RECENT_VALUES
+#if RECENT_MODE == LL
   /*
   was difficult to think of how to impl RECENT!
   basic singly-linked-list with only tail addition (polling? is that the term)
@@ -225,7 +240,7 @@ private:
       node = node->next;
     }
 
-    debug_print(']');
+    debug_println(']');
   }
 #else
   /*
@@ -234,8 +249,9 @@ private:
    */
   byte data;
   double runningAvrg = 0;
+  //! TODO: rename runningSumN to smthn else, runningAvrgN? numValuesEntered
   ulong runningSumN = 0; // number of entered vals
-  static constexpr double ALPHA = 47;
+  // static constexpr double ALPHA = 47;
 
   void addRunningAvrg(byte val) {
     // y[n] = α x[n] + (1−α) y[n−1]
@@ -271,7 +287,7 @@ private:
 
 public:
   bool valueHasBeenSet() const {
-#if STORE_RECENT_VALUES
+#if RECENT_MODE == LL
     return recentTail != nullptr;
 #else
     return runningSumN > 0;
@@ -279,9 +295,10 @@ public:
   }
 
   void setData(byte value) {
-#if STORE_RECENT_VALUES
+#if RECENT_MODE == LL
+    _addSixtyRecentsOnce();//!
     addRecent(value);
-    // _printAllRecent();
+    _printAllRecent();//!
 #else
     data = value;
     addRunningAvrg(value);
@@ -289,7 +306,7 @@ public:
   }
 
   byte getData() const {
-#if STORE_RECENT_VALUES
+#if RECENT_MODE == LL
     return recentTail == nullptr ? 0 : recentTail->val;
 #else
     return data;
@@ -298,7 +315,7 @@ public:
 
     // RECENT
   byte getAverageValue() const {
-#if STORE_RECENT_VALUES
+#if RECENT_MODE == LL
     if (recentHead == nullptr || recentLen == 0)
       return 0;
 
@@ -858,7 +875,7 @@ void loop() {
         debug_println(F("DEBUG: SELECT released before 1s"));
         state = MAIN;
       } else {
-        debug_println(F("DEBUG: Timeout until SELECT held for 1s"));
+        //! debug_println(F("DEBUG: Timeout until SELECT held for 1s"));
       }
     }
     break;
@@ -869,7 +886,7 @@ void loop() {
   // about it
   // wait until select is released
   case SELECT_AWAITING_RELEASE:
-    debug_println(F("DEBUG: Awaiting SELECT release"));
+    //! debug_println(F("DEBUG: Awaiting SELECT release"));
     // if SELECT has been released
     if (!(lcd.readButtons() & BUTTON_SELECT)) {
       debug_println(F("DEBUG: SELECT released"));
