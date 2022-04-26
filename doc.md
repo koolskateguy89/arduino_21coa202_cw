@@ -79,6 +79,8 @@ The head of this linked list is stored statically in `Channel::headChannel` and 
 
 Debug functions generally start with '`_`', and are commented with '`// debug`'.
 
+Right after syncronisation, the program sends a few
+
 ## Reflection
 
 * *200–500 words of reflection on your code.  Include those things that
@@ -130,7 +132,7 @@ HCI is implemented using a finite state machine:
 
 *In documentation, indicate how lay out use of EEPROM, which LoC and functions I use to store information*
 
-Each channel occupies 19 bytes in the EEPROM:
+Each channel occupies 26 bytes in the EEPROM:
 
 | # of Bytes | Description |
 | ----- | --- |
@@ -139,18 +141,28 @@ Each channel occupies 19 bytes in the EEPROM:
 | 1 | Minimum Vaue |
 | 1 | Description length |
 | 15 | Description |
+| 7 | My student ID |
 
-The beginning address for a channel is calculated using `(id - 'A') * 19`. This creates a distance of 19 bytes between each channel (A: 0, B: 19, C: 38, etc.).
+The beginning address for a channel is calculated using `(id - 'A') * 26`. This creates a distance of 26 bytes between the beginning addresses of each channel (A: 0, B: 26, C: 52, etc.).
 
-A channel stored in EEPROM is 'validated' by checking the ID written at the address for the channel is correct and that the written description length does not exceed the maximum. Though this is a weak way to check that the channel was actually written and not just 'there', I couldn't think of a better way.
+The mechanism to determine whether the values were written by me is a 3 step process:
+1. Check that the written student ID is equals to my student ID
+2. Check that the written ID matches the ID of the channel that should be written in that address
+3. Check that the written description length is between 1 and 15 inclusive
 
-I use the namespace `_EEPROM` for all functions relating to using the EEPROM, namely `_EEPROM::updateEEPROM(Channel*)` and `_EEPROM::readEEPROM()`.
+Thus it is simple to 'invalidate' any written channel: by modifying the values written such that they fail any step in the above process, for example setting the written ID to '@'.
+
+I use the namespace `_EEPROM` for all functions relating to using the EEPROM, mainly `_EEPROM::updateEEPROM(Channel*)` and `_EEPROM::readEEPROM()`.
+
+As channels are implemented as a linked-list, `_EEPROM::readEEPROM()` returns the head of a linked-list of EEPROM-read channels.
 
 ## RECENT
 
 *In documentation, indicate the names and locations of the data structures used to store the recent values*
 
 *running sum?*
+
+### Circular linked list
 
 I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value to manage the most recent values for a channel.
 
@@ -192,6 +204,12 @@ unsigned int calculateAverage() {
 ```
 
 But I think using a linked-list should be more memory-efficient, at least for a small number of entered values.
+
+### Exponential Moving Average
+
+Using a close estimation for the average makes sense as getting the average is the output, the implementation is abstracted away.
+
+It makes sense to do as you won't be able to store the 64 most recent values anyway, and thus calculating the average of the e.g. 32 most recent values will be as estimate for the average of the 64. So a compromise has to be made of estimating
 
 ## NAMES
 
