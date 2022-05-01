@@ -2,6 +2,8 @@ package f120840
 
 import kotlin.math.absoluteValue
 
+const val TOTAL_AVERAGE = 0
+
 fun main(vararg args: String) {
     val results = mutableMapOf<Int, MutableList<Double>>()
 
@@ -24,13 +26,17 @@ fun main(vararg args: String) {
                 val a2 = this[d2]!!
                 a1.compareTo(a2)
             }.forEach { (alpha, avrgDiff) ->
-                println("1 / %-2d  =  $avrgDiff".format(alpha))
+                if (alpha == TOTAL_AVERAGE)
+                    println(" TOTAL  =  $avrgDiff".format(alpha))
+                else
+                    println("1 / %-2d  =  $avrgDiff".format(alpha))
             }
         }
 }
 
 class Alpha(val nRecents: Int) {
-    val alphas = 2..64
+    val alphas = (2..64) + TOTAL_AVERAGE
+
     val alphasAvrgs = mutableMapOf<Int, Double>().apply {
         alphas.forEach {
             this[it] = 0.0
@@ -53,6 +59,7 @@ class Alpha(val nRecents: Int) {
         alphas.forEach {
             alphasAvrgs[it] = startAvrg
         }
+        alphasAvrgs[TOTAL_AVERAGE] = values.sum().toDouble()
 
         for (i in 65..nRecents) {
             println("\t$i")
@@ -63,13 +70,23 @@ class Alpha(val nRecents: Int) {
             // println("exact = $exact")
 
             alphas.forEach {
-                val alpha: Double = 1.0 / it
+                val diff: Double
+                if (it == TOTAL_AVERAGE) {
+                    val sum: Double = alphasAvrgs.getValue(it) + added
+                    alphasAvrgs[it] = sum
 
-                var runningAvrg = alphasAvrgs.getValue(it)
-                runningAvrg = alpha * added + (1 - alpha) * runningAvrg
-                alphasAvrgs[it] = runningAvrg
+                    val avrg: Double = sum / values.size
 
-                val diff = (exact - runningAvrg).absoluteValue
+                     diff = (exact - avrg).absoluteValue
+                } else {
+                    val alpha: Double = 1.0 / it
+
+                    var runningAvrg = alphasAvrgs.getValue(it)
+                    runningAvrg = alpha * added + (1 - alpha) * runningAvrg
+                    alphasAvrgs[it] = runningAvrg
+
+                    diff = (exact - runningAvrg).absoluteValue
+                }
 
                 results.computeIfAbsent(it) { mutableListOf() }
                     .add(diff)
