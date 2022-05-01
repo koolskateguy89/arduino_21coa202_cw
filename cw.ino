@@ -371,10 +371,8 @@ void readCreateCommand(Channel **topChannel);
 void readValueCommand(char cmdId);
 void messageError(char cmdId);
 void messageError(char cmdId, char channelId);
-void messageError(char cmdId, char channelId, const String &rest);
+void messageError(char cmdId, char channelId, const char *readSoFar);
 void printRestOfMessage();
-// handling button presses (main)
-//? TODO
 // display
 void displayChannel(uint8_t row, Channel *ch);
 void clearChannelRow(uint8_t row);
@@ -611,7 +609,7 @@ namespace _EEPROM {
       eeprom_update_block(desc, (void*) (offset + 1), len);
     }
 
-    void readString(int addr, char *str, byte len) {
+    void readStr(int addr, char *str, byte len) {
       eeprom_read_block(str, (void*) addr, len);
       str[ len ] = 0;
     }
@@ -619,7 +617,7 @@ namespace _EEPROM {
     //! TODO: comment about validation using student id
     bool channelHasValidStudentId(char id) {
       char readStudentId[8];
-      readString(studentIdOffset(addressForId(id)), readStudentId, 7);
+      readStr(studentIdOffset(addressForId(id)), readStudentId, 7);
       return strcmp(readStudentId, STUDENT_ID) == 0;
     }
 
@@ -639,7 +637,7 @@ namespace _EEPROM {
         return nullptr;
 
       char *desc = (char*) malloc((1 + descLen) * sizeof(*desc));
-      readString(descOffset(idAddr) + 1, desc, descLen);
+      readStr(descOffset(idAddr) + 1, desc, descLen);
 
       byte max = EEPROM[ maxOffset(idAddr) ];
 
@@ -980,23 +978,48 @@ void readCreateCommand(Channel **topChannelPtr) {
 }
 
 void readValueCommand(char cmdId) {
-  int available = Serial.available();
-  // add 1 because of trailing \n
-  if (available < 2 + 1 || available > MAX_CMD_LENGTH - 1 + 1)
+  // only 1 char entered
+  if (Serial.available() < 2) {
+    debug_println(F("DEBUG: No channel ID:"));
     return messageError(cmdId);
+  }
 
   char channelId = Serial.read();
 
-  if (!isUpperCase(channelId))
+  if (!isUpperCase(channelId)) {
+    debug_println(F("DEBUG: Invalid channel ID:"));
     return messageError(cmdId, channelId);
+  }
 
-  String valueS = Serial.readStringUntil('\n');
-  long value = valueS.toInt();
+  char valueS[4];
+  size_t lenRead = Serial.readBytesUntil('\n', valueS, 3);
+  valueS[ lenRead ] = 0;
 
-  if ((value == 0 && valueS != "0") // input wasn't numeric
-      || isOutOfByteRange(value)
-      )
-     return messageError(cmdId, channelId, valueS);
+  // message too short
+  if (lenRead == 0) {
+    debug_println(F("DEBUG: No value:"));
+    return messageError(cmdId, channelId);
+  }
+
+  // message too long
+  if (lenRead == 3 && Serial.peek() != '\n') {
+    debug_println(F("DEBUG: Too long:"));
+    return messageError(cmdId, channelId, valueS);
+  }
+
+  // remove 'trailing' newline from Serial buffer
+  Serial.read();
+
+  char *temp;
+  long value = strtol(valueS, &temp, 10);
+  // message invalid number
+  if (*temp != '\0') {
+    debug_println(F("DEBUG: Not numeric:"));
+    return messageError(cmdId, channelId, valueS);
+  } else if (isOutOfByteRange(value)) {
+    debug_println(F("DEBUG: Outside of 0-255:"));
+    return messageError(cmdId, channelId, valueS);
+  }
 
   Channel *ch = Channel::channelForId(channelId);
   // if channel hasn't been created, don't do anything
@@ -1028,7 +1051,8 @@ void readValueCommand(char cmdId) {
 void messageError(char cmdId) {
   Serial.print(F("ERROR:"));
   Serial.print(cmdId);
-  printRestOfMessage();
+  if (cmdId != '\n')
+    printRestOfMessage();
 }
 
 void messageError(char cmdId, char channelId) {
@@ -1038,11 +1062,12 @@ void messageError(char cmdId, char channelId) {
   printRestOfMessage();
 }
 
-void messageError(char cmdId, char channelId, const String &rest) {
+void messageError(char cmdId, char channelId, const char *readSoFar) {
   Serial.print(F("ERROR:"));
   Serial.print(cmdId);
   Serial.print(channelId);
-  Serial.println(rest);
+  Serial.print(readSoFar);
+  printRestOfMessage();
 }
 
 // instead of reading entire message then printing it to serial
@@ -1050,10 +1075,11 @@ void messageError(char cmdId, char channelId, const String &rest) {
 void printRestOfMessage() {
   while (Serial.available()) {
     char read = Serial.read();
-    Serial.print(read);
     if (read == '\n')
       break;
+    Serial.print(read);
   }
+  Serial.println();
 }
 
 /* display */
@@ -1242,10 +1268,3 @@ void _printHciState(HciState hciState) {
     debug_println(F("RIGHT_MAX"));
   }
 }
-
-
-/*
-TODO
-what about Serial sends 'CA'
-then 5s later sends 'sadad\n'
-*/

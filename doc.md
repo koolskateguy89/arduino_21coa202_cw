@@ -31,7 +31,9 @@ date: Semester 2
 - SELECT_AWAITING_RELEASE
   - waiting for select button to be released
 
+<!--
 ![Main FSM alt text](main_fsm.png "Main FSM")
+-->
 
 * *If there are other (sub) FSMs in your code then indicate those here.*
 
@@ -44,7 +46,7 @@ There are other FSMs in my code, they are in extensions. (tryna say to look at e
   constants.  Also describe the variables that are instances of these
   classes or types.*
 
-Channels are implemented as an ordered singly-linked-list (ordered by channel ID) of structs (each channel is a node). A single channel is made up of:
+Channels are implemented as an ordered singly-linked-list (ordered by channel ID) of structs (each channel is a node). The base characteristics of a channel are:
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -57,11 +59,10 @@ Channels are implemented as an ordered singly-linked-list (ordered by channel ID
 | byte | scrollIndex | SCROLL: the start index of the currently displayed description |;
 | unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |;
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
-| RecentNode* | recentHead | RECENT: the head of the RECENT linked list for this channel |
-| RecentNode* | recentTail | RECENT: the tail of the RECENT linked list for this channel |
-| byte | recentLen | RECENT: the number of recent values currently stored |
 
-The head of this linked list is stored statically in `Channel::headChannel` and globally (as a reference) in `headChannel`. When a new channel is created using `Channel::create`, the linked list is updated using `Channel::insertChannel`, which will insert the new channel into the appropriate position, according to the channel's ID.
+The rest is determined by the set RECENT_MODE.
+
+The head of this linked list is stored statically in `Channel::headChannel`. When a new channel is created using `Channel::create`, the linked list is updated using `Channel::insertChannel`, which will insert the new channel into the appropriate position, according to the channel's ID.
 
 * *When you have functions to update the global data structures/store,
   list these with a sentence description of what each one does.*
@@ -126,7 +127,9 @@ It was simple to implement as it was done in the Week 3 lab.
 
 HCI is implemented using a finite state machine:
 
+<!--
 ![HCI FSM alt text](hci_fsm.png "HCI FSM")
+-->
 
 ## EEPROM
 
@@ -162,7 +165,12 @@ As channels are implemented as a linked-list, `_EEPROM::readEEPROM()` returns th
 
 *running sum?*
 
-### Circular linked list
+As RECENT seems to be impossible without making any compromise, it is implemented in 2 ways, which make different compromises:
+1. using a linked list as a queue
+2. using an exponential moving average
+
+
+### Queue (Linked List)
 
 I use a queue (implemented with a singly-linked-list), with a max size of 64, which once exceeded will discard the head value to manage the most recent values for a channel.
 
@@ -205,11 +213,35 @@ unsigned int calculateAverage() {
 
 But I think using a linked-list should be more memory-efficient, at least for a small number of entered values.
 
+| Type | Name | Description |
+| --- | --- | --- |
+| RecentNode* | recentHead | RECENT: the head of the RECENT linked list for this channel |
+| RecentNode* | recentTail | RECENT: the tail of the RECENT linked list for this channel |
+| byte | recentLen | RECENT: the number of recent values currently stored |
+
 ### Exponential Moving Average
 
-Using a close estimation for the average makes sense as getting the average is the output, the implementation is abstracted away.
+I had to make a choice between using the average of all values entered and using an exponential moving average (EMA). I decided to implement an EMA as it is more accurate for the average of the last 64 values. More specifically, as the numbers of values entered increases, the more accurate an EMA is over a total average.
+
+The EMA implementation is based upon this formula:
+
+*TODO: dont try and explain how it works, but explain the problem with when <64 values have been entered (use wikipedia page?), and how i solved it by essentially using a total average*
+
+ y[n] = α x[n] + (1−α) y[n−1]
+
+<img src="https://render.githubusercontent.com/render/math?math=y[n]%20=%20\alpha%20x[n]%20%2b%20(1-\alpha)%20y[n-1]">
+
+
+In my implementation of an EMA, the average of the first 64 values is pretty much exaxtrasasdsadasda
+
 
 It makes sense to do as you won't be able to store the 64 most recent values anyway, and thus calculating the average of the e.g. 32 most recent values will be as estimate for the average of the 64. So a compromise has to be made of estimating
+
+| Type | Name | Description |
+| --- | --- | --- |
+| byte | data | The current value of this channel |
+| double | runningAvrg | RECENT: The current average |
+| unsigned long | runningSumN | RECENT: The number of values that have been entered to this channel |
 
 ## NAMES
 
@@ -227,28 +259,20 @@ A channel's description/name is stored in a `const char*`.It is printed to the d
 
 *In documentation, highlight parts of FSM required for this particular requirement and the LoC and functions that carry this implementation*
 
-SCROLL and NAMES are implemented together as they go hand-in-hand.
+SCROLL and NAMES are implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
 It is implemented using a simple FSM:
 
+<!--
 ![SCROLL FSM alt text](scroll_fsm.png "SCROLL FSM")
+-->
 
+It essentially displays a substring of the channel description
 
-## Submission
-
-* *After following the instructions, **delete this section and ALL the subsequent sections from your report**.*
-
-* *Prepare the report as a PDF.*
-
-### From Markdown source
-
-If you are preparing this in `markdown`, then I applaud you.  To convert to a PDF use the `pandoc` and LaTeX software (available from <https://pandoc.org/> and <https://tug.org/texlive/>).  `pandoc` is installed in the N001/2/3 labs under both MacOS and Windows.
-
-~~~bash
-pandoc -N -o output.pdf --template=coa202.latex input.md --shift-heading-level-by=-1
-~~~
-
-`coa202.latex` is available from LEARN.  This works for me with `pandoc` version 2.11.4.* and later versions.
+```bash
+pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --shift-heading-level-by=-1
+pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
+```
 
 ### Gradescope Tagging
 
