@@ -5,12 +5,13 @@
 #include <avr/eeprom.h>
 
 // RECENT: RECENT_MODE
-#define LL 0 // linked-list
-#define EMA 1 // exponential moving average
+#define LL 0    // linked-list
+#define ARRAY 1 // circular array
+#define EMA 2   // exponential moving average
 
 // implementation flags
 #define DEBUG true
-#define RECENT_MODE LL // RECENT: LL or EMA
+#define RECENT_MODE ARRAY // RECENT: LL/ARRAY/EMA
 
 #ifndef DEBUG
   #define DEBUG false
@@ -34,10 +35,22 @@
 // RECENT
 #if RECENT_MODE == LL
   #define MAX_RECENT_SIZE 10 //! 10?
+  // 439 -> 234
+  // 457 -> 327
+#elif RECENT_MODE == ARRAY
+  #define MAX_RECENT_ARRAY_SIZE 1 //! 10?
+  // 457 -> 157(?!)
+  // 439 -> 163 (275 ~ 11 each)
+  // 439 -> 175 -2> 163
+
+  // 439? -> 163 -2> 163
+  // 439 ->
+
+  // 457 ->
 #elif RECENT_MODE == EMA
   #define ALPHA 47.0
 #else
-  #error RECENT_MODE is defined as an invalid value (LL/EMA)
+  #error RECENT_MODE is defined as an invalid value (LL/ARRAY/EMA)
 #endif
 
 #define STUDENT_ID             "F120840"
@@ -95,14 +108,10 @@ typedef enum {
   INITIALISATION,
   SYNCHRONISATION,
   AFTER_SYNC,
-  MAIN, // basically AWAITING_MESSAGE and AWAITING_PRESS
+  MAIN_LOOP, // basically AWAITING_MESSAGE and AWAITING_PRESS
   SELECT_HELD,
   SELECT_AWAITING_RELEASE,
-  UP_PRESSED,
-  DOWN_PRESSED,
-  // HCI
-  LEFT_PRESSED,
-  RIGHT_PRESSED,
+  BUTTON_PRESSED,
 } State;
 
 typedef enum {
@@ -242,6 +251,19 @@ private:
 
     debug_println(']');
   }
+#elif RECENT_MODE == ARRAY
+  // circular array
+  byte *recents = nullptr;
+  ulong nRecents = 0;
+
+  void addRecent(byte val) {
+    if (recents == nullptr) {
+      recents = (byte*) malloc(MAX_RECENT_ARRAY_SIZE * sizeof(*recents));
+    }
+
+    recents[nRecents % MAX_RECENT_ARRAY_SIZE] = val;
+    nRecents++;
+  }
 #else
   /*
    * Use an exponential moving average (https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average)
@@ -249,24 +271,24 @@ private:
    */
   byte data;
   double runningAvrg = 0;
-  //! TODO: rename runningSumN to smthn else, runningAvrgN? numValuesEntered
-  ulong runningSumN = 0; // number of entered vals
-  // static constexpr double ALPHA = 47;
+  ulong nRecents = 0; // number of entered vals
 
-  void addRunningAvrg(byte val) {
+  void addRecent(byte val) {
+    data = val;
+
     // y[n] = α x[n] + (1−α) y[n−1]
     /*
-     * before 64 values have been entered, each value will weigh: 1 / (runningSumN + 1)
-     *   so when runningSumN == 0:
+     * before 64 values have been entered, each value will weigh: 1 / (nRecents + 1)
+     *   so when nRecents == 0:
      *            weight = 1
-     *         runningSumN == 1:
+     *         nRecents == 1:
      *            weight = 1/2
      *         etc.
      *   so runningAvrg should be very accurate/precise
      *
      * once 64 values have been entered, each value will weigh 1/64 which I think makes sense
      *
-     * 1/46, 1/48, 1/44 are actual best
+     * 1/46, 1/48, 1/44 are 'actual' best?
      * 1/47 is best, avrg diff of ~3.25 (2dp) - for high number of values
      *
      * mid 50s best for lower number ~100
@@ -274,14 +296,14 @@ private:
      */
     // the weighting for the new value
     double alpha;
-    if (runningSumN < 64) {
-      alpha = 1.0 / (runningSumN + 1);
+    if (nRecents < 64) {
+      alpha = 1.0 / (nRecents + 1);
     } else {
       alpha = 1.0 / ALPHA;
     }
 
     runningAvrg = alpha * val + (1 - alpha) * runningAvrg;
-    runningSumN++;
+    nRecents++;
   }
 #endif
 
@@ -289,25 +311,32 @@ public:
   bool valueHasBeenSet() const {
 #if RECENT_MODE == LL
     return recentTail != nullptr;
+#elif RECENT_MODE == ARRAY
+    return nRecents > 0;
 #else
-    return runningSumN > 0;
+    return nRecents > 0;
 #endif
   }
 
   void setData(byte value) {
-#if RECENT_MODE == LL
-    _addSixtyRecentsOnce();//!
     addRecent(value);
-    _printAllRecent();//!
-#else
-    data = value;
-    addRunningAvrg(value);
-#endif
+//! #if RECENT_MODE == LL
+//     // _addSixtyRecentsOnce();//!
+//     addRecent(value);
+//     // _printAllRecent();//!
+// #elif RECENT_MODE == ARRAY
+//     addRecent(value);
+// #else
+//     data = value;
+//     addRunningAvrg(value);
+// #endif
   }
 
   byte getData() const {
 #if RECENT_MODE == LL
     return recentTail == nullptr ? 0 : recentTail->val;
+#elif RECENT_MODE == ARRAY
+    return recents == nullptr ? 0 : recents[(nRecents - 1) % MAX_RECENT_ARRAY_SIZE];
 #else
     return data;
 #endif
@@ -327,7 +356,19 @@ public:
       node = node->next;
     }
 
-    return round(sum / recentLen);
+    return round((float) sum / recentLen);
+#elif RECENT_MODE == ARRAY
+    if (recents == nullptr || nRecents == 0)
+      return 0;
+
+    uint sum = 0;
+    const uint len = min(nRecents, MAX_RECENT_ARRAY_SIZE);
+
+    for (int i = 0; i < len; i++) {
+      sum += recents[i];
+    }
+
+    return round((float) sum / len);
 #else
     return round(runningAvrg);
 #endif
@@ -375,12 +416,12 @@ void messageError(char cmdId, char channelId, const char *readSoFar);
 void printRestOfMessage();
 // display
 void displayChannel(uint8_t row, Channel *ch);
+void displayRightJustified3Digits(uint num);
 void clearChannelRow(uint8_t row);
 void updateDisplay(Channel *topChannel, HciState hciState);
 void updateBacklight();
 void selectDisplay();
 // utils
-String rightJustify3Digits(uint num);
 void skipLine(Stream &s);
 // debug
 void _printChannelIds(const Channel *head);
@@ -598,7 +639,7 @@ namespace _EEPROM {
   #define maxOffset(idAddr)       (idAddr + 1)
   #define minOffset(idAddr)       (idAddr + 2)
   #define descOffset(idAddr)      (idAddr + 3)
-  #define studentIdOffset(idAddr) (idAddr + 18)
+  #define studentIdOffset(idAddr) (idAddr + 19)
 
   void updateEEPROM(const Channel *ch);
   Channel *readEEPROM();
@@ -611,7 +652,7 @@ namespace _EEPROM {
 
     void readStr(int addr, char *str, byte len) {
       eeprom_read_block(str, (void*) addr, len);
-      str[ len ] = 0;
+      str[ len ] = '\0';
     }
 
     //! TODO: comment about validation using student id
@@ -662,7 +703,7 @@ namespace _EEPROM {
     EEPROM.update(minOffset(addr), ch->min);
 
     writeDesc(descOffset(addr), ch->desc, ch->descLen);
-    // write my student ID next to channel data for persistence validation(?)
+    //? write my student ID next to channel data for persistence validation(?)
     eeprom_update_block(STUDENT_ID, (void*) studentIdOffset(addr), 7);
   }
 
@@ -685,7 +726,6 @@ namespace _EEPROM {
     return head;
   }
 
-  /*
   // debug - will cause reading that id to return nullptr
   void _invalidateChannel(char id) {
     EEPROM.update(addressForId(id), 0);
@@ -696,7 +736,6 @@ namespace _EEPROM {
     for (char id = 'A'; id <= 'Z'; id++)
       EEPROM.update(addressForId(id), 0);
   }
-  */
 }
 
 // NAMES and SCROLL together
@@ -775,10 +814,10 @@ void setup() {
 
 void loop() {
   static State state = INITIALISATION;
-  // HCI
-  static HciState hciState;
+  static HciState hciState; // HCI
   static Channel *topChannel;
   static ulong selectPressTime;
+  static uint8_t pressedButton;
 
   uint8_t b;
 
@@ -787,6 +826,7 @@ void loop() {
     hciState = NORMAL;
     topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
+    pressedButton = 0;
     state = SYNCHRONISATION;
     break;
 
@@ -809,13 +849,13 @@ void loop() {
 
     // EEPROM
     topChannel = Channel::headChannel = _EEPROM::readEEPROM();
-    debug_println(F("DEBUG: Channels stored in EEPROM:"));
+    debug_print(F("DEBUG: Channels stored in EEPROM: "));
     _printChannelsFull(topChannel);
 
-    state = MAIN;
+    state = MAIN_LOOP;
     break;
 
-  case MAIN: // basically AWAITING_PRESS & AWAITING_MESSAGE
+  case MAIN_LOOP: // basically AWAITING_PRESS & AWAITING_MESSAGE
     b = lcd.readButtons();
 
     if (b & BUTTON_SELECT) {
@@ -827,13 +867,13 @@ void loop() {
       debug_println(F("DEBUG: UP pressed"));
       if (Channel::canGoUp(topChannel, hciState))
         topChannel = Channel::channelBefore(topChannel, hciState);
-      state = UP_PRESSED;
+      pressedButton = BUTTON_UP;
 
     } else if (b & BUTTON_DOWN) {
       debug_println(F("DEBUG: DOWN pressed"));
       if (Channel::canGoDown(topChannel, hciState))
         topChannel = Channel::channelAfter(topChannel, hciState);
-      state = DOWN_PRESSED;
+      pressedButton = BUTTON_DOWN;
 
     } else if (b & BUTTON_LEFT) {
       // HCI
@@ -842,7 +882,7 @@ void loop() {
       _printHciState(hciState);
       // 'reset' topChannel (get first channel that meets hcistate)
       topChannel = Channel::firstChannel(hciState);
-      state = LEFT_PRESSED;
+      pressedButton = BUTTON_LEFT;
 
     } else if (b & BUTTON_RIGHT) {
       // HCI
@@ -851,8 +891,11 @@ void loop() {
       _printHciState(hciState);
       // 'reset' topChannel
       topChannel = Channel::firstChannel(hciState);
-      state = RIGHT_PRESSED;
+      pressedButton = BUTTON_RIGHT;
     }
+
+    if (pressedButton != 0)
+      state = BUTTON_PRESSED;
 
     handleSerialInput(&topChannel);
 
@@ -871,60 +914,31 @@ void loop() {
       // if select has been released
       if (!(lcd.readButtons() & BUTTON_SELECT)) {
         debug_println(F("DEBUG: SELECT released before 1s"));
-        state = MAIN;
-      } else {
-        //! debug_println(F("DEBUG: Timeout until SELECT held for 1s"));
+        state = MAIN_LOOP;
       }
     }
     break;
 
-  //* maybe make a DisplayState - I think this makes more sense (NORMAL, SELECT)
-  // not sure about this cos it'll keep changing display for select(?) as in keep
-  // calling selectDisplay(), not really a problem tho i think but im a bit :shrug: :grimace:
-  // about it
   // wait until select is released
   case SELECT_AWAITING_RELEASE:
-    //! debug_println(F("DEBUG: Awaiting SELECT release"));
     // if SELECT has been released
     if (!(lcd.readButtons() & BUTTON_SELECT)) {
       debug_println(F("DEBUG: SELECT released"));
       lcd.clear();
-      state = MAIN;
+      state = MAIN_LOOP;
     }
 
     handleSerialInput(&topChannel);
     break;
 
-  // wait until up is released
-  case UP_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_UP)) {
-      debug_println(F("DEBUG: UP released"));
-      state = MAIN;
+  case BUTTON_PRESSED:
+    if (!(lcd.readButtons() & pressedButton)) {
+      debug_println(F("DEBUG: button released"));
+      pressedButton = 0;
+      state = MAIN_LOOP;
     }
-    break;
 
-  // wait until down is released
-  case DOWN_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_DOWN)) {
-      debug_println(F("DEBUG: DOWN released"));
-      state = MAIN;
-    }
-    break;
-
-  // wait until left is released?
-  case LEFT_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_LEFT)) {
-      debug_println(F("DEBUG: LEFT released"));
-      state = MAIN;
-    }
-    break;
-
-  // wait until right is released?
-  case RIGHT_PRESSED:
-    if (!(lcd.readButtons() & BUTTON_RIGHT)) {
-      debug_println(F("DEBUG: RIGHT released"));
-      state = MAIN;
-    }
+    handleSerialInput(&topChannel);
     break;
   }
 }
@@ -956,7 +970,7 @@ void readCreateCommand(Channel **topChannelPtr) {
 
   char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
   byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
-  desc[ descLen ] = 0;
+  desc[ descLen ] = '\0';
 
   if (descLen < MAX_DESC_LENGTH) {
     // reallocate a shorter buffer
@@ -993,7 +1007,7 @@ void readValueCommand(char cmdId) {
 
   char valueS[4];
   size_t lenRead = Serial.readBytesUntil('\n', valueS, 3);
-  valueS[ lenRead ] = 0;
+  valueS[ lenRead ] = '\0';
 
   // message too short
   if (lenRead == 0) {
@@ -1090,7 +1104,7 @@ void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(DATA_POSITION, row);
   // leave blank until value has been set
   if (ch->valueHasBeenSet())
-    lcd.print(rightJustify3Digits(ch->getData()));
+    displayRightJustified3Digits(ch->getData());
   else
     lcd.print(F("   "));
 
@@ -1098,12 +1112,18 @@ void displayChannel(uint8_t row, Channel *ch) {
   lcd.setCursor(RECENT_POSITION, row);
   if (ch->valueHasBeenSet()) {
     lcd.print(',');
-    lcd.print(rightJustify3Digits(ch->getAverageValue()));
+    displayRightJustified3Digits(ch->getAverageValue());
   } else
     lcd.print(F("    "));
 
   // NAMES,SCROLL
   NAMES_SCROLL::displayChannelName(row, ch);
+}
+
+void displayRightJustified3Digits(uint num) {
+  char buf[4];
+  sprintf(buf, "%3d", num);
+  lcd.print(buf);
 }
 
 void clearChannelRow(uint8_t row) {
@@ -1163,7 +1183,7 @@ void updateBacklight() {
     ch = ch->next;
   }
 
-  color = (color == 0) ? WHITE : color;
+  color = color == 0 ? WHITE : color;
   lcd.setBacklight(color);
 }
 
@@ -1178,15 +1198,6 @@ void selectDisplay() {
 }
 
 /* Utility functions */
-
-String rightJustify3Digits(uint num) {
-  if (num >= 100)
-    return String(num);
-
-  String prefix = (num >= 10) ? F(" ") : F("  ");
-  prefix.concat(num);
-  return prefix;
-}
 
 void skipLine(Stream &s) {
   s.find('\n');
@@ -1240,12 +1251,12 @@ void _printChannel(const Channel *ch, bool newLine) {
 }
 
 void _printChannelsFull(Channel* head) {
-  debug_println(F("DEBUG: fullChannels = ["));
-
   if (head == nullptr) {
-    debug_println(F("DEBUG: ]"));
+    debug_println(F("[]"));
     return;
   }
+
+  debug_println('[');
 
   _printChannel(head);
   Channel *node = head->next;
