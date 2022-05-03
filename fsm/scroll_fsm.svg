@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentStyleType="text/css" height="178px" preserveAspectRatio="none" style="width:411px;height:178px;background:#FFFFFF;" version="1.1" viewBox="0 0 411 178" width="411px" zoomAndPan="magnify"><defs/><g><g id="SCROLL_START"><rect fill="#F1F1F1" height="52.5938" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="158" x="193.5" y="120"/><line style="stroke:#181818;stroke-width:0.5;" x1="193.5" x2="351.5" y1="146.2969" y2="146.2969"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="110" x="217.5" y="137.9951">SCROLL_START</text><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="138" x="198.5" y="164.292">, // scrollIndex == 0</text></g><g id="SCROLLING"><rect fill="#F1F1F1" height="52.5938" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="153" x="7" y="7"/><line style="stroke:#181818;stroke-width:0.5;" x1="7" x2="160" y1="33.2969" y2="33.2969"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="81" x="43" y="24.9951">SCROLLING</text><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="133" x="12" y="51.292">,    // scrollIndex++</text></g><g id="SCROLL_END"><rect fill="#F1F1F1" height="52.5938" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="155" x="195" y="7"/><line style="stroke:#181818;stroke-width:0.5;" x1="195" x2="350" y1="33.2969" y2="33.2969"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="93" x="226" y="24.9951">SCROLL_END</text><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="135" x="200" y="51.292">,   // scrollIndex = 0</text></g><ellipse cx="395.5" cy="33.5" fill="#222222" rx="10" ry="10" style="stroke:none;stroke-width:1.0;"/><!--MD5=[e793b37a3cfcf2dbc468d83daa2a0a96]
+link *start to SCROLL_START--><g id="link_*start_SCROLL_START"><path d="M388.606,40.799 C382.945,45.967 374.714,53.469 367.5,60 C346.855,78.6909 323.619,99.6056 305.294,116.071 " fill="none" id="*start-to-SCROLL_START" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="301.224,119.7276,310.5922,116.6885,304.9435,116.3861,305.2459,110.7374,301.224,119.7276" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[e8256541ba9865f6bd36fe071eca6dbd]
+link SCROLL_START to SCROLLING--><g id="link_SCROLL_START_SCROLLING"><path d="M228.902,119.895 C199.85,102.8325 161.648,80.3967 131.693,62.804 " fill="none" id="SCROLL_START-to-SCROLLING" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="127.335,60.245,133.0708,68.2513,131.6467,62.7766,137.1214,61.3525,127.335,60.245" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[359552b2c3aad4bb97f4dea4c8fef18b]
+link SCROLLING to SCROLL_END--><g id="link_SCROLLING_SCROLL_END"><path d="M160.281,33.5 C170.111,33.5 179.941,33.5 189.771,33.5 " fill="none" id="SCROLLING-to-SCROLL_END" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="194.911,33.5,185.911,29.5,189.911,33.5,185.911,37.5,194.911,33.5" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[32b8b971297383e28f830d1dff1d63ba]
+link SCROLL_END to SCROLL_START--><g id="link_SCROLL_END_SCROLL_START"><path d="M272.5,60.245 C272.5,76.4958 272.5,97.5795 272.5,114.7139 " fill="none" id="SCROLL_END-to-SCROLL_START" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="272.5,119.895,276.5,110.895,272.5,114.895,268.5,110.895,272.5,119.895" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[3e0b883715a4d679a2633c5b6cac11e9]
+@startuml
+hide empty description
+
+SCROLL_START: , // scrollIndex == 0
+SCROLLING: ,    // scrollIndex++
+SCROLL_END: ,   // scrollIndex = 0
+
+[*] - -> SCROLL_START
+SCROLL_START - -> SCROLLING
+SCROLLING -> SCROLL_END
+SCROLL_END - -> SCROLL_START
+@enduml
+
+PlantUML version 1.2022.4beta2(Unknown compile time)
+(GPL source distribution)
+Java Runtime: Java(TM) SE Runtime Environment
+JVM: Java HotSpot(TM) 64-Bit Server VM
+Default Encoding: UTF-8
+Language: en
+Country: US
+--></g></svg>
