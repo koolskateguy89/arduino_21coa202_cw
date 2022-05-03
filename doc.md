@@ -29,7 +29,7 @@ date: Semester 2
 - BUTTON_PRESSED
   - waiting for stored button to be released
 
-[![Main FSM alt text](fsm/main_fsm.svg "Main FSM")](http://www.plantuml.com/plantuml/uml/TPD1Zvim48Nl_XLpQgGg77hD8LgwOJT8559WjQsQ2h5uI2o1ZMnds_px3fl48LPwjFtUy6Q-uS7OMjj3tx6zu0ZO3_O874sZnM25aep5QLp6OH8NOHbdwGA455RKdJ08nXxQbXK_qyTrdgLEOL1oc7sVWNf73GLgaiDMAjaW3AZflL6Ii_2fZF9gT9yjLDE2Qa7qGuSzIekSRFZNeZGKnKphiMzXd5P9bcqMm8KPkle8pRwM4Zj3fa6h1esXi8tgXTn1JwTwX-FRdrfOQ9M6juErIiAWwOqLKH8zbjKwIbOBS9BJBLW5RmXxxFXMZjTVA8i6ZHtM1ld56xw6DAhqkShf71RHDHaDYbC_4A_W4xGQaVBqIXzT6EzBhlBNbxBCqcgJHqKHKJ0_koTdlpx_Xc09jymyX12GmeFcGxodMO0LFQg3lIkUqfpzc8761iKxScfNzHTeLz67np5aLvmGQB7RsoLCWPmF9rH8488Ws4eQgz9ukVn8Dwsp17zwBviv9D5JEOTLzfhEHuPv_BoUrBsjU1eoc-u6vVQYkQ7ueljBuNePjmbEo_I_1ReTadCwtDvw-FAn6TV5rVM0ajCF_my0)
+[![Main FSM alt text](doc/main_fsm.svg "Main FSM")](http://www.plantuml.com/plantuml/uml/ZL9DZzCm4BtxLyoj4jeAkFQ0Dji6Db99IfFLWWYgil6qjUIC8zjPs7zFl4bTuyjoYJoJz-PZthirjj5sw2Gx2uw0NMzVWADfjUYjKCHObcTLbcopCgco8b-1GGjMzUjpGuJo1kR7QdN6Xi_1200QfEojhgbcZc9GOcjt6esfH8StqBidyhl1MaMEy86LF_Br_Rx8Wrx4OV5j0UePDPIeHIDhKjGYzAZ1OAk8i-HpbUuFZZmpf30Mr154rqlia2nog0d_M2GZ59cm7FkQPFbXMnIx5N1XUjcyG3jjOKPIhrMBne2WLdM2Jj2DKND2z-zt8omSbOQdrnscZLYPRjDrTRXFjviLUCYKTMi-8PnHyffS-gE1yQjHOcEGNxZ9OpBUFFzos8znKgRNoOmTE9A5RFDViyMDVQExXwegyiDkdvPb6ivfhDB8vurY5llvxXSiFy6_beWS0iiH4IaPAkineMoBxmlGsA9uHWv7hRgBEbVGAyUBnQwwJGs3gy_1x30d_NAvh6dQpMUjw30g4b_bOVT-KppcGQ6mXB_IND-vveGNgP1x6x7G4-6qiSv-ScSGcFmHSOCJUFHRzdcB5haXWaUMyAnR93vqyYy0)
 
 * *If there are other (sub) FSMs in your code then indicate those here.*
 
@@ -67,6 +67,13 @@ The head of this linked list is stored statically in `Channel::headChannel`. Whe
 | --- | --- |
 | `Channel::create(char id, const char* desc, byte descLen)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
 | `Channel::insertChannel(Channel* ch)` | Inserts the given channel into the linked list of channels in its appropriate position |
+
+
+
+
+
+
+When processing incoming messages while select is being held, I encountered a problem where sometimes the Serial wouldn't have all things entered ready, e.g. I entered `VA5` but `Serial.available()` would return `2`
 
 ## Debugging
 
@@ -132,8 +139,6 @@ It was simple to implement as it was done in the Week 3 lab.
 
 ## HCI
 
-*Write about this extension*
-
 *In documentation, show LoC and thinking behind mechanism to display subsets of list of channels*
 
 HCI is implemented using a finite state machine with the states:
@@ -142,7 +147,7 @@ HCI is implemented using a finite state machine with the states:
 - LEFT_MIN
 - RIGHT_MAX
 
-[![HCI FSM alt text](fsm/hci_fsm.svg "HCI FSM")](http://www.plantuml.com/plantuml/uml/ZO_FIi0m3CRlVOgSXRs01zaE_Xbi4uO7GKNA6boWxKgJgdjxvsIkJ1YU6f8Vl-zhoQAZ96VLI0O1NP0P3F8GAGXDNga548Jklc-hHZNNDm-lRTrTWY4ELiymUJl3C6hlqJ9ya8oWuTc_QviGB3A3B4SWON3aoIMd-lhsRh5KZ_-ql4NKWZ4JwSzLf9ukNg0ehhPsFy-wsOj-Jn0YCgFPeq-ORPsP3qGUj7zc7VzgpgdVGvPsP4hq9Zdx1G00)
+[![HCI FSM alt text](doc/hci_fsm.svg "HCI FSM")](http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00)
 
 ## EEPROM
 
@@ -225,7 +230,9 @@ The EMA implementation is based upon this formula:
 
 *TODO: dont try and explain how it works, but explain the problem with when <64 values have been entered (use wikipedia page?), and how i solved it by essentially using a total average*
 
- y[n] = α x[n] + (1−α) y[n−1]
+y[n] = α x[n] + (1−α) y[n−1]
+
+abcdefg
 
 <img src="https://render.githubusercontent.com/render/math?math=y[n]%20=%20\alpha%20x[n]%20%2b%20(1-\alpha)%20y[n-1]">
 
@@ -259,19 +266,18 @@ A channel's description/name is stored in a `const char*`.It is printed to the d
 
 SCROLL and NAMES are implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
-It is implemented using a simple FSM with the states:
+It is implemented using a flowchart:
+![SCROLL flowchart](doc/scroll_flowchart.svg "SCROLL Flowchart")
 
-  SCROLL_START, // scrollIndex == 0
-  SCROLLING,    // scrollIndex++
-  SCROLL_END,   // scrollIndex = 0
-
-[![SCROLL FSM alt text](fsm/scroll_fsm.svg "SCROLL FSM")](http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000)
+[![SCROLL FSM alt text](doc/scroll_fsm.svg "SCROLL FSM")](http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000)
 
 It essentially displays a substring of the channel description
 
 ```bash
 pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --shift-heading-level-by=-1
 pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
+
+--pdfengine=xelatex if having alpha char
 ```
 
 ### Gradescope Tagging
