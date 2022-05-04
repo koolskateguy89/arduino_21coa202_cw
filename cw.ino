@@ -65,9 +65,6 @@
 #define TEAL     6
 #define WHITE    7
 
-#define UP_ARROW_CHAR   0
-#define DOWN_ARROW_CHAR 1
-
 #define SYNC_TIMEOUT   1000
 #define SELECT_TIMEOUT 1000
 
@@ -103,7 +100,6 @@ extern char *__brkval;
 /* data types */
 typedef unsigned int uint;
 typedef unsigned long ulong;
-typedef uint8_t byte; //! REMOVE AFTER PICS TAKEN
 
 typedef enum {
   INITIALISATION,
@@ -121,7 +117,7 @@ typedef struct serialinput_s {
   static constexpr byte INPUT_LEN = 17;
 
   char input[INPUT_LEN + 1] = "";
-  uint8_t inputLen = 0;
+  byte inputLen = 0;
 } SerialInput;
 
 typedef enum {
@@ -416,9 +412,9 @@ void createCommand(SerialInput &serialInput, Channel **topChannelPtr);
 void valueCommand(SerialInput &serialInput);
 void readValueCommand(char cmdId);
 // display
-void displayChannel(uint8_t row, Channel *ch);
+void displayChannel(byte row, Channel *ch);
 void displayRightJustified3Digits(uint num);
-void clearChannelRow(uint8_t row);
+void clearChannelRow(byte row);
 void updateDisplay(Channel *topChannel, HciState hciState);
 void updateBacklight();
 void selectDisplay();
@@ -576,6 +572,9 @@ Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
  * Arrows are 2 chevrons
  */
 namespace UDCHARS {
+  #define UP_ARROW_CHAR   0
+  #define DOWN_ARROW_CHAR 1
+
   void createChars();
   void displayUpArrow(bool display);
   void displayDownArrow(bool display);
@@ -588,13 +587,13 @@ namespace UDCHARS {
   }
 
   void displayUpArrow(bool display) {
-    uint8_t ch = display ? UP_ARROW_CHAR : ' ';
+    byte ch = display ? UP_ARROW_CHAR : ' ';
     lcd.setCursor(ARROW_POSITION, TOP_LINE);
     lcd.write(ch);
   }
 
   void displayDownArrow(bool display) {
-    uint8_t ch = display ? DOWN_ARROW_CHAR : ' ';
+    byte ch = display ? DOWN_ARROW_CHAR : ' ';
     lcd.setCursor(ARROW_POSITION, BOTTOM_LINE);
     lcd.write(ch);
   }
@@ -801,7 +800,7 @@ void loop() {
   static HciState hciState; // HCI
   static Channel *topChannel;
   static ulong selectPressTime;
-  static uint8_t pressedButton;
+  static byte pressedButton;
 
   switch (state) {
   case INITIALISATION:
@@ -809,7 +808,7 @@ void loop() {
     topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
     pressedButton = 0;
-    UDCHARS::createChars();
+    UDCHARS::createChars(); // UDCHARS
     state = SYNCHRONISATION;
     break;
 
@@ -934,7 +933,7 @@ void handleSerialInput(Channel **topChannelPtr) {
 
   while (Serial.available()) {
     char *input = serialInput.input;
-    uint8_t &inputLen = serialInput.inputLen;
+    byte &inputLen = serialInput.inputLen;
 
     char read = Serial.read();
 
@@ -1065,7 +1064,7 @@ void valueCommand(SerialInput &serialInput) {
 
 /* display */
 
-void displayChannel(uint8_t row, Channel *ch) {
+void displayChannel(byte row, Channel *ch) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(ch->id);
   lcd.setCursor(DATA_POSITION, row);
@@ -1093,7 +1092,7 @@ void displayRightJustified3Digits(uint num) {
   lcd.print(buf);
 }
 
-void clearChannelRow(uint8_t row) {
+void clearChannelRow(byte row) {
   lcd.setCursor(ID_POSITION, row);
   lcd.print(F("               "));
 }
