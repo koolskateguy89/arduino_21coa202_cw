@@ -38,7 +38,7 @@
   // 439 -> 234
   // 457 -> 327
 #elif RECENT_MODE == ARRAY
-  #define MAX_RECENT_ARRAY_SIZE 1 //! 10?
+  #define RECENT_ARRAY_SIZE 1 //! 10-15?
   // 457 -> 157(?!)
   // 439 -> 163 (275 ~ 11 each)
   // 439 -> 175 -2> 163
@@ -114,17 +114,20 @@ typedef enum {
   BUTTON_PRESSED,
 } State;
 
+// used to pass info about previously read serial between methods
+typedef struct serialinput_s {
+  // len(CA123456789012345) = 17
+  static constexpr byte INPUT_LEN = 17;
+
+  char input[INPUT_LEN + 1] = "";
+  uint8_t inputLen = 0;
+} SerialInput;
+
 typedef enum {
   NORMAL,
   LEFT_MIN,
   RIGHT_MAX,
 } HciState;
-
-typedef enum {
-  SCROLL_START, // scrollIndex == 0
-  SCROLLING,    // scrollIndex++
-  SCROLL_END,   // scrollIndex = 0
-} ScrollState;
 
 /*
 Benefits of implementing channels as a LL instead of array[26]:
@@ -160,7 +163,6 @@ typedef struct channel_s {
   // SCROLL
   byte scrollIndex;
   ulong lastScrollTime;
-  ScrollState scrollState;
 
   void setDescription(const char *desc, byte descLen) {
     if (this->desc != nullptr)
@@ -169,7 +171,6 @@ typedef struct channel_s {
     this->descLen = descLen;
     // SCROLL, reset scrolling
     scrollIndex = lastScrollTime = 0;
-    scrollState = SCROLL_START;
   }
 
 private:
@@ -258,10 +259,10 @@ private:
 
   void addRecent(byte val) {
     if (recents == nullptr) {
-      recents = (byte*) malloc(MAX_RECENT_ARRAY_SIZE * sizeof(*recents));
+      recents = (byte*) malloc(RECENT_ARRAY_SIZE * sizeof(*recents));
     }
 
-    recents[nRecents % MAX_RECENT_ARRAY_SIZE] = val;
+    recents[nRecents % RECENT_ARRAY_SIZE] = val;
     nRecents++;
   }
 #else
@@ -336,7 +337,7 @@ public:
 #if RECENT_MODE == LL
     return recentTail == nullptr ? 0 : recentTail->val;
 #elif RECENT_MODE == ARRAY
-    return recents == nullptr ? 0 : recents[(nRecents - 1) % MAX_RECENT_ARRAY_SIZE];
+    return recents == nullptr ? 0 : recents[(nRecents - 1) % RECENT_ARRAY_SIZE];
 #else
     return data;
 #endif
@@ -362,7 +363,7 @@ public:
       return 0;
 
     uint sum = 0;
-    const uint len = min(nRecents, MAX_RECENT_ARRAY_SIZE);
+    const uint len = min(nRecents, RECENT_ARRAY_SIZE);
 
     for (int i = 0; i < len; i++) {
       sum += recents[i];
@@ -407,6 +408,12 @@ private:
 /* function prototypes */
 // main
 void handleSerialInput(Channel **topChannelPtr);
+void printError(SerialInput &serialInput);
+void processError(SerialInput &serialInput);
+void createCommand(SerialInput &serialInput, Channel **topChannelPtr);
+void valueCommand(SerialInput &serialInput);
+
+
 // reading commands (main)
 void readCreateCommand(Channel **topChannel);
 void readValueCommand(char cmdId);
@@ -652,7 +659,7 @@ namespace _EEPROM {
 
     void readStr(int addr, char *str, byte len) {
       eeprom_read_block(str, (void*) addr, len);
-      str[ len ] = '\0';
+      str[len] = '\0';
     }
 
     //! TODO: comment about validation using student id
@@ -739,13 +746,10 @@ namespace _EEPROM {
 }
 
 // NAMES and SCROLL together
-/*
- * Uses a FSM to manage scrolling state, uses Channel variables
- * scrollState, scrollIndex & lastScrollTime.
- */
 namespace NAMES_SCROLL {
-  #define SCROLL_CHARS      1 //2
-  #define SCROLL_TIMEOUT    500 //1000
+  #define SCROLL_CHARS      1
+  #define SCROLL_TIMEOUT    500
+  // scroll SCROLL_CHARS every SCROLL_TIMEOUT milliseconds
   #define DESC_DISPLAY_LEN  6
 
   void displayChannelName(int row, Channel *ch);
@@ -760,42 +764,20 @@ namespace NAMES_SCROLL {
     lcd.setCursor(DESC_POSITION, row);
     for (int i = si; i < si + DESC_DISPLAY_LEN; i++) {
       // display space(s) at end to overwrite old displayed value
-      char c = (i < dLen) ? ch->desc[ i ] : ' ';
+      char c = (i < dLen) ? ch->desc[i] : ' ';
       lcd.print(c);
     }
 
-    ScrollState &state = ch->scrollState;
-
     // SCROLL
-    /*
-    tbh this could just be a bunch of ifs, it's not really a state
-    its more like a flowchart ish
-    */
-    switch (state) {
-      // not really a state
-      case SCROLL_START:
-        // only need to scroll if channel desc is too big
-        if (dLen > DESC_DISPLAY_LEN)
-          state = SCROLLING;
-        break;
-
-      case SCROLLING:
-        if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
-          ch->scrollIndex += SCROLL_CHARS;
-          // once full desc has been displayed, return to start
-          if (ch->scrollIndex + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
-            ch->scrollIndex = 0;
-            state = SCROLL_END;
-          }
-          ch->lastScrollTime = millis();
+    if (dLen > DESC_DISPLAY_LEN) {
+      if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
+        si += SCROLL_CHARS;
+        // once full desc has been displayed, return to start
+        if (si + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
+          si = 0;
         }
-        break;
-
-      // not really needed? can be handled in SCROLLING
-      case SCROLL_END:
-        ch->scrollIndex = 0;
-        state = SCROLL_START;
-        break;
+        ch->lastScrollTime = millis();
+      }
     }
   }
 }
@@ -806,6 +788,7 @@ void setup() {
   lcd.clear();
 
   // UDCHARS
+  //!? move to INITIALISATION?
   byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
   lcd.createChar(UP_ARROW_CHAR, upChevron);
   byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
@@ -818,8 +801,6 @@ void loop() {
   static Channel *topChannel;
   static ulong selectPressTime;
   static uint8_t pressedButton;
-
-  uint8_t b;
 
   switch (state) {
   case INITIALISATION:
@@ -856,26 +837,27 @@ void loop() {
     break;
 
   case MAIN_LOOP: // basically AWAITING_PRESS & AWAITING_MESSAGE
-    b = lcd.readButtons();
+    pressedButton = lcd.readButtons();
 
-    if (b & BUTTON_SELECT) {
+    if (pressedButton & BUTTON_SELECT) {
       debug_println(F("DEBUG: SELECT pressed"));
       selectPressTime = millis();
       state = SELECT_HELD;
+      pressedButton = 0;
 
-    } else if (b & BUTTON_UP) {
+    } else if (pressedButton & BUTTON_UP) {
       debug_println(F("DEBUG: UP pressed"));
       if (Channel::canGoUp(topChannel, hciState))
         topChannel = Channel::channelBefore(topChannel, hciState);
       pressedButton = BUTTON_UP;
 
-    } else if (b & BUTTON_DOWN) {
+    } else if (pressedButton & BUTTON_DOWN) {
       debug_println(F("DEBUG: DOWN pressed"));
       if (Channel::canGoDown(topChannel, hciState))
         topChannel = Channel::channelAfter(topChannel, hciState);
       pressedButton = BUTTON_DOWN;
 
-    } else if (b & BUTTON_LEFT) {
+    } else if (pressedButton & BUTTON_LEFT) {
       // HCI
       debug_println(F("DEBUG: LEFT pressed"));
       hciState = (hciState == LEFT_MIN) ? NORMAL : LEFT_MIN;
@@ -884,7 +866,7 @@ void loop() {
       topChannel = Channel::firstChannel(hciState);
       pressedButton = BUTTON_LEFT;
 
-    } else if (b & BUTTON_RIGHT) {
+    } else if (pressedButton & BUTTON_RIGHT) {
       // HCI
       debug_println(F("DEBUG: RIGHT pressed"));
       hciState = (hciState == RIGHT_MAX) ? NORMAL : RIGHT_MAX;
@@ -928,7 +910,7 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel);
+    handleSerialInput(&topChannel); //!
     break;
 
   case BUTTON_PRESSED:
@@ -938,30 +920,174 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel);
+    handleSerialInput(&topChannel); //!
     break;
   }
 }
 
+void resetSerialInput(SerialInput &serialInput) {
+  memset(serialInput.input, '\0', SerialInput::INPUT_LEN + 1);
+  serialInput.inputLen = 0;
+  // serialInput.readAll = false;
+  // serialInput.messageType = UNKNOWN;
+}
+
+//! problem when calling this when not in MAIN_LOOP state,
+// it seems the Serial doesnt fully take in chars
 void handleSerialInput(Channel **topChannelPtr) {
-  if (!Serial.available())
+  static SerialInput serialInput;
+
+  // TODO: see notes
+  // read up to 17 (while inputLen < 17 and not reached new line)
+
+  // TODO: valueCommand happens but hciState != normal, backlight will update
+  // but the displayed stuff wont update
+  while (Serial.available()) {
+    char *input = serialInput.input;
+    uint8_t &inputLen = serialInput.inputLen;
+
+    char read = Serial.read();
+
+    if (read == '\n') {
+
+      input[inputLen] = '\0';
+
+      if (inputLen < 3 || !isUpperCase(input[1]))
+        printError(serialInput);
+      else {
+        if (isCreateCommand(input[0]))
+          createCommand(serialInput, topChannelPtr);
+        else if (isValueCommand(input[0]) && inputLen <= 5)
+          valueCommand(serialInput);
+        else
+          printError(serialInput);
+      }
+
+      resetSerialInput(serialInput);
+
+      break;
+    }
+
+    input[inputLen++] = read;
+
+    if (inputLen > SerialInput::INPUT_LEN) {
+      if (isCreateCommand(input[0]) && isUpperCase(input[1])) {
+        skipLine(Serial);
+        createCommand(serialInput, topChannelPtr);
+      } else
+        processError(serialInput);
+
+      resetSerialInput(serialInput);
+
+      break;
+    }
+  }
+
+  // if (!Serial.available())
+  //   return;
+  //
+  // char cmdId = Serial.read();
+  //
+  // // wait 50ms to allow Serial to have things in its buffer
+  // delay(50);
+  //
+  // if (isCreateCommand(cmdId))
+  //   readCreateCommand(topChannelPtr);
+  // else if (isValueCommand(cmdId))
+  //   readValueCommand(cmdId);
+  // else
+  //   messageError(cmdId);
+}
+
+void printError(SerialInput &serialInput) {
+  Serial.print(F("ERROR:"));
+  Serial.println(serialInput.input);
+}
+
+void processError(SerialInput &serialInput) {
+  Serial.print(F("ERROR:"));
+  Serial.print(serialInput.input);
+
+  while (Serial.available()) {
+    char read = Serial.read();
+    Serial.print(read);
+    if (read == '\n')
+      break;
+  }
+}
+
+void createCommand(SerialInput &serialInput, Channel **topChannelPtr) {
+  char *input = serialInput.input;
+
+  char channelId = input[1];
+
+  byte descLen = serialInput.inputLen - 2;
+  char *desc = (char*) malloc((1 + descLen) * sizeof(*desc));
+  strncpy(desc, input + 2, descLen);
+  desc[descLen] = '\0';
+
+  Channel *ch = Channel::create(channelId, desc, descLen);
+
+  // if creating first channel
+  if (*topChannelPtr == nullptr) {
+    debug_println(F("DEBUG: ^ was first channel"));
+    *topChannelPtr = ch;
+  }
+
+  _EEPROM::updateEEPROM(ch);
+}
+
+void valueCommand(SerialInput &serialInput) {
+  char *input = serialInput.input;
+
+  char cmdId = input[0];
+  char channelId = input[1];
+
+  char *valueS = input + 2;
+
+  char *temp;
+  long value = strtol(valueS, &temp, 10);
+  // message has invalid number
+  if (*temp != '\0') {
+    debug_println(F("DEBUG: Not numeric:"));
+    return messageError(cmdId, channelId, valueS);
+  } else if (isOutOfByteRange(value)) {
+    debug_println(F("DEBUG: Outside of 0-255:"));
+    return messageError(cmdId, channelId, valueS);
+  }
+
+  Channel *ch = Channel::channelForId(channelId);
+  // if channel hasn't been created, don't do anything
+  if (ch == nullptr)
     return;
 
-  char cmdId = Serial.read();
+  DEBUG_ID(channelId);
+  debug_print(value);
+  debug_print(F(" = "));
 
-  if (isCreateCommand(cmdId))
-    readCreateCommand(topChannelPtr);
-  else if (isValueCommand(cmdId))
-    readValueCommand(cmdId);
-  else
-    messageError(cmdId);
+  switch (cmdId) {
+    case 'V':
+      debug_println(F("data"));
+      ch->setData(value);
+      break;
+    case 'X':
+      debug_println(F("max"));
+      ch->max = value;
+      break;
+    case 'N':
+      debug_println(F("min"));
+      ch->min = value;
+      break;
+  }
+
+  _EEPROM::updateEEPROM(ch);
 }
 
 /* reading commands */
 
 void readCreateCommand(Channel **topChannelPtr) {
-  if (Serial.available() < 2)
-    return messageError('C');
+  //  if (Serial.available() < 2)
+    // return messageError('C');
 
   char channelId = Serial.read();
 
@@ -970,7 +1096,7 @@ void readCreateCommand(Channel **topChannelPtr) {
 
   char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
   byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
-  desc[ descLen ] = '\0';
+  desc[descLen] = '\0';
 
   if (descLen < MAX_DESC_LENGTH) {
     // reallocate a shorter buffer
@@ -993,10 +1119,10 @@ void readCreateCommand(Channel **topChannelPtr) {
 
 void readValueCommand(char cmdId) {
   // only 1 char entered
-  if (Serial.available() < 2) {
-    debug_println(F("DEBUG: No channel ID:"));
-    return messageError(cmdId);
-  }
+  // if (Serial.available() < 2) {
+  //   debug_println(F("DEBUG: No channel ID:"));
+  //   return messageError(cmdId);
+  // }
 
   char channelId = Serial.read();
 
@@ -1007,7 +1133,7 @@ void readValueCommand(char cmdId) {
 
   char valueS[4];
   size_t lenRead = Serial.readBytesUntil('\n', valueS, 3);
-  valueS[ lenRead ] = '\0';
+  valueS[lenRead] = '\0';
 
   // message too short
   if (lenRead == 0) {
