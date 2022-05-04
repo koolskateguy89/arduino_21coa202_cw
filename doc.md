@@ -5,9 +5,6 @@ author: _F120840_
 date: Semester 2
 ---
 
-**_In this template delete all the text in italics and replace with your
-  own as appropriate._**
-
 ## FSMs
 
 * *Describe the finite state machine at the centre of your
@@ -144,15 +141,15 @@ The following macros were defined, for use when creating and displaying the cust
 
 The only change to the FSM was that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
 
-![UDCHARS Change To FSM](doc/udchars/fsm_change.svg)
+![UDCHARS FSM Change](doc/udchars/fsm_change.svg)
 
 <!--
 http://www.plantuml.com/plantuml/uml/BSknQWGX4CRntgUO1pWmzLQtkHGHmYLaDzqsehCew2Wp8o5l7uJj_XzylxkePnsrc9GZ0jQkVn1H0kUkkP4nxkbsjtwuRTtTvtC1GGLj_P4y4PORNB4i2Nsy1cW36gLqvOCECubWmQ1VZ29xhdY3FXFZwr1jDC7Bl5eRySo448Peg-2Pso-4vDa7HHOu6yFFs-Dz_TwiDNUaE6hv1m00
 -->
 
-In my code, this change was realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 779):
+In my code, this change was realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 782):
 
-![UDCHARS Code Change to INITIALISATION](doc/udchars/udchars_createChars.png)
+![UDCHARS FSM Code Change](doc/udchars/udchars_createChars.png)
 
 ### Defining
 
@@ -183,7 +180,7 @@ Which are called in `updateDisplay(Channel*, HciState)`:
 
 For example, if channels `A`, `B` and `C` have been created, the Arduino should look like:
 
-![Arduino Display](doc/udchars/arduino_display_abc.jpg)
+![UDCHARS Example Arduino Display](doc/udchars/udchars_arduino.jpg)
 
 As there are no channels before ("above") `A`, the up arrow is not displayed, a space is displayed instead. As there is a channel after ("below") `B`, the down arrow is displayed.
 
@@ -191,11 +188,15 @@ As there are no channels before ("above") `A`, the up arrow is not displayed, a 
 
 The namespace `FREERAM` contains all the code relating to the FREERAM extension.
 
-*In documentation, indicate which lines display the free SRAM*
+The function `FREERAM::<unnamed>::freeMemory()` returns the number of bytes currently free in the Arduino's SRAM.
 
-Lines ?-? display the amount of free SRAM.
+This is displayed to the screen using `FREERAM::displayFreeMemory(byte)` when SELECT has been held for at least 1 second:
 
-The method `freeMemory` returns the number of bytes currently free in the Arduino's SRAM. This is displayed to the screen using `FREERAM::displayFreeMemory(int)` when SELECT has been held for at least 1 second.
+![`FREERAM::displayFreeMemory(byte)`](doc/freeram/display.png)
+
+This is called by `selectDisplay()`, the Arduino should look like:
+
+![FREERAM Arduino Display](doc/freeram/freeram_arduino.jpg)
 
 ## HCI
 
