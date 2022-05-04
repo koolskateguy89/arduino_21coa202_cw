@@ -14,6 +14,8 @@ date: Semester 2
   implementation.  Show the states and the transitions.  Draw
   the states and transitions as a picture and include it here.*
 
+Write a description of your states, what is being waited for, and the actions take during transition between states.
+
 - INITIALISATION
   - setup
 - SYNCHRONISATION
@@ -29,11 +31,19 @@ date: Semester 2
 - BUTTON_PRESSED
   - waiting for stored button to be released
 
-[![Main FSM alt text](doc/main_fsm.svg "Main FSM")](http://www.plantuml.com/plantuml/uml/ZL9DZzCm4BtxLyoj4jeAkFQ0Dji6Db99IfFLWWYgil6qjUIC8zjPs7zFl4bTuyjoYJoJz-PZthirjj5sw2Gx2uw0NMzVWADfjUYjKCHObcTLbcopCgco8b-1GGjMzUjpGuJo1kR7QdN6Xi_1200QfEojhgbcZc9GOcjt6esfH8StqBidyhl1MaMEy86LF_Br_Rx8Wrx4OV5j0UePDPIeHIDhKjGYzAZ1OAk8i-HpbUuFZZmpf30Mr154rqlia2nog0d_M2GZ59cm7FkQPFbXMnIx5N1XUjcyG3jjOKPIhrMBne2WLdM2Jj2DKND2z-zt8omSbOQdrnscZLYPRjDrTRXFjviLUCYKTMi-8PnHyffS-gE1yQjHOcEGNxZ9OpBUFFzos8znKgRNoOmTE9A5RFDViyMDVQExXwegyiDkdvPb6ivfhDB8vurY5llvxXSiFy6_beWS0iiH4IaPAkineMoBxmlGsA9uHWv7hRgBEbVGAyUBnQwwJGs3gy_1x30d_NAvh6dQpMUjw30g4b_bOVT-KppcGQ6mXB_IND-vveGNgP1x6x7G4-6qiSv-ScSGcFmHSOCJUFHRzdcB5haXWaUMyAnR93vqyYy0)
+![Main FSM](doc/main_fsm.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/XLB1Zfim4BtxA-OMgTgexPL3jUo6Tf5II0EhRLKgnE99OiaU8zjiktzVM09nVMWk4UEyDpDlthkrhZ6kLvAT14T0rRbNu6XR8pedD36MPccPnjkqYCiqpoAmwC3fxlxK4A6yWVD759smuUTY003rKdREL5InaM9HOkjs1gqjXS8RwCPFv7UzSvf6mWTM_CZk7_PvviqY3gjlAz0lQA108nfPaQOMeKC35bjDdCMVosHVZ-GpGmhhG1z0g4wYGdB8Ay8_3iaEagpVZNsDqwpUvlak0Yvi9vjNQ2SHjgBEw1Qj1K6jLeAEe8QgEUBmr-z6E3Xe0yzl0YOvh4YsoNrPFoJRJGGBP7eTDJuZd50EsupF7oqClmObDXRvp8sVuk7WsPTwFzHnaLpsigxdI0xIpVNDmh6NCNUFPPbdzMwV54NYRscTDiZFUWBMVmOozlFTBrX_Wd-34kG6rWCYyDVtUy7uPgw-hy1WY-85EHoCLhDf5z0RP_6GNUoS1lfsJCMSEwXelLvNDCbUNfrG63G93_QuUx_9dpAlaTTYEU3SVmpJ4MSFaI_fOdvO_6t302oRZyc1AJW1rpl1WhwMgskq82W1F4ZBmhf5uhsIVm40
+-->
 
 * *If there are other (sub) FSMs in your code then indicate those here.*
 
 My code includes other FSMs in the extensions.
+
+
+
+**TODO: FSM after all extensions*
 
 ## Data structures
 
@@ -109,6 +119,10 @@ I also feel like my program didn't properly reflect a proper finite-state machin
 
 But I felt that this did not make sense to be a state as the program flow for this would be more akin to a flowchart than a state machine.
 
+
+// TODO: when valueCommand happens and hciState != normal, backlight will update
+  // but the displayed stuff wont update to necessarily not show the channel
+
 ## Extension Features {.unnumbered}
 
 * *For each extension feature you have implemented describe the
@@ -121,21 +135,48 @@ But I felt that this did not make sense to be a state as the program flow for th
 
 ## UDCHARS
 
-*Write about this extension*
+The namespace `UDCHARS` contains all the code relating to the UDCHARS extension.
 
-The arrows are 2 chevrons pointing in the appropriate direction, designed using [chareditor.com](https://chareditor.com). Lines ? and ? define the chars.
+The following macros were defined, for use when creating and displaying the custom characters:
 
-It was simple to implement as it was done in the early labs.
+- `UP_ARROW_CHAR`   0
+- `DOWN_ARROW_CHAR` 1
+
+The only change to the FSM is that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
+
+![UDCHARS Change To FSM](doc/udchars/fsm_change.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/BSknQWGX4CRntgUO1pWmzLQtkHGHmYLaDzqsehCew2Wp8o5l7uJj_XzylxkePnsrc9GZ0jQkVn1H0kUkkP4nxkbsjtwuRTtTvtC1GGLj_P4y4PORNB4i2Nsy1cW36gLqvOCECubWmQ1VZ29xhdY3FXFZwr1jDC7Bl5eRySo448Peg-2Pso-4vDa7HHOu6yFFs-Dz_TwiDNUaE6hv1m00
+-->
+
+In my code, this change is realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 779):
+
+![UDCHARS Code Change to INITIALISATION](doc/udchars/udchars_createChars.png)
+
+The custom characters are displayed to the lcd using `UDCHARS::displayUpArrow()` and `UDCHARS::displayDownArrow()` when the display is updated by the function `updateDisplay(Channel*, HciState)`.
+
+They were designed as 2 chevrons pointing in the appropriate direction (mirrored vertically), using [chareditor.com](https://chareditor.com):
+
+![Up Chevron Design](doc/udchars/upChevron.png)
+
+![Up Chevron Code](doc/udchars/upChevronCode.png)
+
+![Down Chevron Design](doc/udchars/downChevron.png)
+
+![Down Chevron Code](doc/udchars/downChevronCode.png)
 
 ## FREERAM
 
 *Write about this extension*
 
+The namespace `FREERAM` contains all the code relating to the FREERAM extension.
+
 *In documentation, indicate which lines display the free SRAM*
 
 Lines ?-? display the amount of free SRAM.
 
-It was simple to implement as it was done in the Week 3 lab.
+The method `freeMemory` returns the number of bytes currently free in the Arduino's SRAM. This is displayed to the screen using `FREERAM::displayFreeMemory(int)` when SELECT has been held for at least 1 second.
 
 ## HCI
 
@@ -147,7 +188,11 @@ HCI is implemented using a finite state machine with the states:
 - LEFT_MIN
 - RIGHT_MAX
 
-[![HCI FSM alt text](doc/hci_fsm.svg "HCI FSM")](http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00)
+![HCI FSM](doc/hci_fsm.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00
+-->
 
 ## EEPROM
 
@@ -184,22 +229,28 @@ As channels are implemented as a linked-list, `_EEPROM::readEEPROM()` returns th
 *running sum?*
 
 As RECENT seems to be impossible without making any compromise, it is implemented in 3 different ways, which make different compromises:
+
 1. using a [queue with a maximum size](#queue-linked-list)
 2. using a [circular array](#circular-array)
 3. using an [exponential moving average](#exponential-moving-average)
 
 You can choose which one the program uses by changing the macro `RECENT_MODE`, it should only be defined as one of the following defined macros:
+
 - `LL` (linked-list as queue)
 - `ARRAY` (circular array)
 - `EMA` (exponential moving average)
 
 If it is defined as any other value, the program will not compile.
 
+Using a queue and circular array are similar because they store the most recent values
+
 ### Queue (Linked List)
 
 I use a queue (implemented with a singly-linked-list), with a maximum size defined by the macro `MAX_RECENT_SIZE`, which once exceeded will discard the head value to manage the most recent values for a channel.
 
 `Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
+
+While using a linked-list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
 
 But using a linked-list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
 
@@ -230,11 +281,11 @@ The EMA implementation is based upon this formula:
 
 *TODO: dont try and explain how it works, but explain the problem with when <64 values have been entered (use wikipedia page?), and how i solved it by essentially using a total average*
 
-y[n] = α x[n] + (1−α) y[n−1]
+![EMA equation](doc/ema.svg)
 
-abcdefg
-
-<img src="https://render.githubusercontent.com/render/math?math=y[n]%20=%20\alpha%20x[n]%20%2b%20(1-\alpha)%20y[n-1]">
+<!--
+https://render.githubusercontent.com/render/math?math=y[n]%20=%20\alpha%20x[n]%20%2b%20(1-\alpha)%20y[n-1]
+-->
 
 
 In my implementation of an EMA, the average of the first 64 values is pretty much exaxtrasasdsadasda
@@ -267,9 +318,13 @@ A channel's description/name is stored in a `const char*`.It is printed to the d
 SCROLL and NAMES are implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
 It is implemented using a flowchart:
-![SCROLL flowchart](doc/scroll_flowchart.svg "SCROLL Flowchart")
+![SCROLL Flowchart](doc/scroll_flowchart.svg)
 
-[![SCROLL FSM alt text](doc/scroll_fsm.svg "SCROLL FSM")](http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000)
+![SCROLL FSM](doc/scroll_fsm.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000
+-->
 
 It essentially displays a substring of the channel description
 
