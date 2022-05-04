@@ -576,8 +576,16 @@ Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
  * Arrows are 2 chevrons
  */
 namespace UDCHARS {
+  void createChars();
   void displayUpArrow(bool display);
   void displayDownArrow(bool display);
+
+  void createChars() {
+    byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
+    lcd.createChar(UP_ARROW_CHAR, upChevron);
+    byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
+    lcd.createChar(DOWN_ARROW_CHAR, downChevron);
+  }
 
   void displayUpArrow(bool display) {
     uint8_t ch = display ? UP_ARROW_CHAR : ' ';
@@ -799,15 +807,7 @@ void loop() {
     topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
     pressedButton = 0;
-
-    {
-      // UDCHARS
-      byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
-      lcd.createChar(UP_ARROW_CHAR, upChevron);
-      byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
-      lcd.createChar(DOWN_ARROW_CHAR, downChevron);
-    }
-
+    UDCHARS::createChars();
     state = SYNCHRONISATION;
     break;
 
