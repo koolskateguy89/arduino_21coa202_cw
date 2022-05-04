@@ -654,12 +654,12 @@ namespace _EEPROM {
   Channel *readEEPROM();
 
   namespace {
-    void writeDesc(int offset, const char *desc, byte len) {
+    void writeDesc(int offset, const char *desc, uint len) {
       EEPROM.update(offset, len);
       eeprom_update_block(desc, (void*) (offset + 1), len);
     }
 
-    void readStr(int addr, char *str, byte len) {
+    void readStr(int addr, char *str, uint len) {
       eeprom_read_block(str, (void*) addr, len);
       str[len] = '\0';
     }
@@ -755,6 +755,13 @@ namespace NAMES_SCROLL {
   #define SCROLL_TIMEOUT    500
   #define DESC_DISPLAY_LEN  6
 
+  namespace {
+    bool shouldScroll(Channel *ch) { // SCROLL
+      return ch->descLen > DESC_DISPLAY_LEN
+        && millis() - ch->lastScrollTime >= SCROLL_TIMEOUT;
+    }
+  }
+
   void displayChannelName(int row, Channel *ch);
 
   void displayChannelName(int row, Channel *ch) {
@@ -772,15 +779,13 @@ namespace NAMES_SCROLL {
     }
 
     // SCROLL
-    if (dLen > DESC_DISPLAY_LEN) {
-      if (millis() - ch->lastScrollTime >= SCROLL_TIMEOUT) {
-        si += SCROLL_CHARS;
-        // once full desc has been displayed, return to start
-        if (si + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
-          si = 0;
-        }
-        ch->lastScrollTime = millis();
+    if (shouldScroll(ch)) {
+      si += SCROLL_CHARS;
+      // once full desc has been displayed, return to start
+      if (si + DESC_DISPLAY_LEN > dLen + 1) { // +1 to make even lengths work (because of 'trailing' char)
+        si = 0;
       }
+      ch->lastScrollTime = millis();
     }
   }
 }
@@ -797,9 +802,6 @@ void loop() {
   static Channel *topChannel;
   static ulong selectPressTime;
   static uint8_t pressedButton;
-
-  // TODO: when valueCommand happens and hciState != normal, backlight will update
-  // but the displayed stuff wont update to necessarily not show the channel
 
   switch (state) {
   case INITIALISATION:
