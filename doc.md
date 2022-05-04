@@ -121,7 +121,7 @@ But I felt that this did not make sense to be a state as the program flow for th
 
 
 // TODO: when valueCommand happens and hciState != normal, backlight will update
-  // but the displayed stuff wont update to necessarily not show the channel
+// but the displayed stuff wont update to necessarily not show the channel
 
 ## Extension Features {.unnumbered}
 
@@ -142,7 +142,7 @@ The following macros were defined, for use when creating and displaying the cust
 - `UP_ARROW_CHAR`   0
 - `DOWN_ARROW_CHAR` 1
 
-The only change to the FSM is that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
+The only change to the FSM was that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
 
 ![UDCHARS Change To FSM](doc/udchars/fsm_change.svg)
 
@@ -150,13 +150,13 @@ The only change to the FSM is that in the `INITIALISATION` state, the custom cha
 http://www.plantuml.com/plantuml/uml/BSknQWGX4CRntgUO1pWmzLQtkHGHmYLaDzqsehCew2Wp8o5l7uJj_XzylxkePnsrc9GZ0jQkVn1H0kUkkP4nxkbsjtwuRTtTvtC1GGLj_P4y4PORNB4i2Nsy1cW36gLqvOCECubWmQ1VZ29xhdY3FXFZwr1jDC7Bl5eRySo448Peg-2Pso-4vDa7HHOu6yFFs-Dz_TwiDNUaE6hv1m00
 -->
 
-In my code, this change is realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 779):
+In my code, this change was realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 779):
 
 ![UDCHARS Code Change to INITIALISATION](doc/udchars/udchars_createChars.png)
 
-The custom characters are displayed to the lcd using `UDCHARS::displayUpArrow()` and `UDCHARS::displayDownArrow()` when the display is updated by the function `updateDisplay(Channel*, HciState)`.
+### Defining
 
-They were designed as 2 chevrons pointing in the appropriate direction (mirrored vertically), using [chareditor.com](https://chareditor.com):
+The custom characters are defined in `UDCHARS::createChars()`, they were designed as 2 chevrons pointing in the appropriate direction (mirrored vertically), using [chareditor.com](https://chareditor.com):
 
 ![Up Chevron Design](doc/udchars/upChevron.png)
 
@@ -166,9 +166,28 @@ They were designed as 2 chevrons pointing in the appropriate direction (mirrored
 
 ![Down Chevron Code](doc/udchars/downChevronCode.png)
 
-## FREERAM
 
-*Write about this extension*
+### Displaying
+
+The arrows can be displayed to the lcd using `UDCHARS::displayUpArrow(bool)` and `UDCHARS::displayDownArrow(bool)`.
+
+These functions have a single parameter `bool display`, which determines whether the arrows is printed to the lcd or a space is printed instead. This is indicative of whether a channel exists above the current `topChannel` or a channel exists below the current `btmChannel`.
+
+![Code to Display Arrows](doc/udchars/displayArrows.png)
+
+Which are called in `updateDisplay(Channel*, HciState)`:
+
+![Displaying of Arrows](doc/udchars/updateDisplay.png)
+
+### Example
+
+For example, if channels `A`, `B` and `C` have been created, the Arduino should look like:
+
+![Arduino Display](doc/udchars/arduino_display_abc.jpg)
+
+As there are not any channels before ("above") `A`, the up arrow is not displayed (a space is displayed instead). As there is a channel after ("below") `B`, the down arrow is displayed.
+
+## FREERAM
 
 The namespace `FREERAM` contains all the code relating to the FREERAM extension.
 
@@ -243,6 +262,9 @@ You can choose which one the program uses by changing the macro `RECENT_MODE`, i
 If it is defined as any other value, the program will not compile.
 
 Using a queue and circular array are similar because they store the most recent values
+
+
+![Memory comp](doc/recent/memory_comp1.png)
 
 ### Queue (Linked List)
 
