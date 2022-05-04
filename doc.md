@@ -59,8 +59,8 @@ Channels are implemented as an ordered singly-linked-list (ordered by channel ID
 | byte | max | This channel's maximum |
 | byte | min | This channel's minimum |
 | channel_s* | next | Pointer to the next created channel (by ID) |
-| byte | scrollIndex | SCROLL: the start index of the currently displayed description |;
-| unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |;
+| byte | scrollIndex | SCROLL: the start index of the currently displayed description |
+| unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
 
 The rest is determined by the set [RECENT_MODE](#recent).
@@ -188,13 +188,13 @@ As there are no channels before ("above") `A`, the up arrow is not displayed, a 
 
 The namespace `FREERAM` contains all the code relating to the FREERAM extension.
 
-The function `FREERAM::<unnamed>::freeMemory()` returns the number of bytes currently free in the Arduino's SRAM.
+The function `FREERAM::<unnamed>::freeMemory()` returns the number of bytes currently available in the Arduino's SRAM.
 
-This is displayed to the screen using `FREERAM::displayFreeMemory(byte)` when SELECT has been held for at least 1 second:
+This can displayed to the screen, left justified, using `FREERAM::displayFreeMemory(byte)`:
 
 ![`FREERAM::displayFreeMemory(byte)`](doc/freeram/display.png)
 
-This is called by `selectDisplay()`, the Arduino should look like:
+This is called by `selectDisplay()`; once SELECT has been held for at least 1 second. The Arduino should look like:
 
 ![FREERAM Arduino Display](doc/freeram/freeram_arduino.jpg)
 
