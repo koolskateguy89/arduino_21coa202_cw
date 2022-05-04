@@ -185,7 +185,7 @@ For example, if channels `A`, `B` and `C` have been created, the Arduino should 
 
 ![Arduino Display](doc/udchars/arduino_display_abc.jpg)
 
-As there are not any channels before ("above") `A`, the up arrow is not displayed, a space is displayed instead. As there is a channel after ("below") `B`, the down arrow is displayed.
+As there are no channels before ("above") `A`, the up arrow is not displayed, a space is displayed instead. As there is a channel after ("below") `B`, the down arrow is displayed.
 
 ## FREERAM
 
