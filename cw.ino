@@ -103,6 +103,7 @@ extern char *__brkval;
 /* data types */
 typedef unsigned int uint;
 typedef unsigned long ulong;
+typedef uint8_t byte; //! REMOVE AFTER PICS TAKEN
 
 typedef enum {
   INITIALISATION,
@@ -406,21 +407,14 @@ private:
 
 
 /* function prototypes */
-// main
+// reading & handling commands
 void handleSerialInput(Channel **topChannelPtr);
+void resetSerialInput(SerialInput &serialInput);
 void printError(SerialInput &serialInput);
 void processError(SerialInput &serialInput);
 void createCommand(SerialInput &serialInput, Channel **topChannelPtr);
 void valueCommand(SerialInput &serialInput);
-
-
-// reading commands (main)
-void readCreateCommand(Channel **topChannel);
 void readValueCommand(char cmdId);
-void messageError(char cmdId);
-void messageError(char cmdId, char channelId);
-void messageError(char cmdId, char channelId, const char *readSoFar);
-void printRestOfMessage();
 // display
 void displayChannel(uint8_t row, Channel *ch);
 void displayRightJustified3Digits(uint num);
@@ -662,7 +656,8 @@ namespace _EEPROM {
       str[len] = '\0';
     }
 
-    //! TODO: comment about validation using student id
+    // check that the channel written was written by me by checking
+    // that my student ID is written there
     bool channelHasValidStudentId(char id) {
       char readStudentId[8];
       readStr(studentIdOffset(addressForId(id)), readStudentId, 7);
@@ -710,7 +705,7 @@ namespace _EEPROM {
     EEPROM.update(minOffset(addr), ch->min);
 
     writeDesc(descOffset(addr), ch->desc, ch->descLen);
-    //? write my student ID next to channel data for persistence validation(?)
+    // write my student ID next to channel data for persistence validation
     eeprom_update_block(STUDENT_ID, (void*) studentIdOffset(addr), 7);
   }
 
@@ -747,9 +742,9 @@ namespace _EEPROM {
 
 // NAMES and SCROLL together
 namespace NAMES_SCROLL {
+  // scroll SCROLL_CHARS every SCROLL_TIMEOUT milliseconds
   #define SCROLL_CHARS      1
   #define SCROLL_TIMEOUT    500
-  // scroll SCROLL_CHARS every SCROLL_TIMEOUT milliseconds
   #define DESC_DISPLAY_LEN  6
 
   void displayChannelName(int row, Channel *ch);
@@ -786,13 +781,6 @@ void setup() {
   Serial.begin(9600);
   lcd.begin(16, 2);
   lcd.clear();
-
-  // UDCHARS
-  //!? move to INITIALISATION?
-  byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
-  lcd.createChar(UP_ARROW_CHAR, upChevron);
-  byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
-  lcd.createChar(DOWN_ARROW_CHAR, downChevron);
 }
 
 void loop() {
@@ -802,12 +790,24 @@ void loop() {
   static ulong selectPressTime;
   static uint8_t pressedButton;
 
+  // TODO: when valueCommand happens and hciState != normal, backlight will update
+  // but the displayed stuff wont update to necessarily not show the channel
+
   switch (state) {
   case INITIALISATION:
     hciState = NORMAL;
     topChannel = Channel::headChannel = nullptr;
     selectPressTime = 0;
     pressedButton = 0;
+
+    {
+      // UDCHARS
+      byte upChevron[] PROGMEM = { B00100, B01010, B10001, B00100, B01010, B10001, B00000, B00000 };
+      lcd.createChar(UP_ARROW_CHAR, upChevron);
+      byte downChevron[] PROGMEM = { B00000, B10001, B01010, B00100, B10001, B01010, B00100, B00000 };
+      lcd.createChar(DOWN_ARROW_CHAR, downChevron);
+    }
+
     state = SYNCHRONISATION;
     break;
 
@@ -910,7 +910,7 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel); //!
+    handleSerialInput(&topChannel);
     break;
 
   case BUTTON_PRESSED:
@@ -920,28 +920,16 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel); //!
+    handleSerialInput(&topChannel);
     break;
   }
 }
 
-void resetSerialInput(SerialInput &serialInput) {
-  memset(serialInput.input, '\0', SerialInput::INPUT_LEN + 1);
-  serialInput.inputLen = 0;
-  // serialInput.readAll = false;
-  // serialInput.messageType = UNKNOWN;
-}
+/* reading commands */
 
-//! problem when calling this when not in MAIN_LOOP state,
-// it seems the Serial doesnt fully take in chars
 void handleSerialInput(Channel **topChannelPtr) {
   static SerialInput serialInput;
 
-  // TODO: see notes
-  // read up to 17 (while inputLen < 17 and not reached new line)
-
-  // TODO: valueCommand happens but hciState != normal, backlight will update
-  // but the displayed stuff wont update
   while (Serial.available()) {
     char *input = serialInput.input;
     uint8_t &inputLen = serialInput.inputLen;
@@ -982,21 +970,11 @@ void handleSerialInput(Channel **topChannelPtr) {
       break;
     }
   }
+}
 
-  // if (!Serial.available())
-  //   return;
-  //
-  // char cmdId = Serial.read();
-  //
-  // // wait 50ms to allow Serial to have things in its buffer
-  // delay(50);
-  //
-  // if (isCreateCommand(cmdId))
-  //   readCreateCommand(topChannelPtr);
-  // else if (isValueCommand(cmdId))
-  //   readValueCommand(cmdId);
-  // else
-  //   messageError(cmdId);
+void resetSerialInput(SerialInput &serialInput) {
+  memset(serialInput.input, '\0', SerialInput::INPUT_LEN + 1);
+  serialInput.inputLen = 0;
 }
 
 void printError(SerialInput &serialInput) {
@@ -1050,10 +1028,10 @@ void valueCommand(SerialInput &serialInput) {
   // message has invalid number
   if (*temp != '\0') {
     debug_println(F("DEBUG: Not numeric:"));
-    return messageError(cmdId, channelId, valueS);
+    return printError(serialInput);
   } else if (isOutOfByteRange(value)) {
     debug_println(F("DEBUG: Outside of 0-255:"));
-    return messageError(cmdId, channelId, valueS);
+    return printError(serialInput);
   }
 
   Channel *ch = Channel::channelForId(channelId);
@@ -1081,145 +1059,6 @@ void valueCommand(SerialInput &serialInput) {
   }
 
   _EEPROM::updateEEPROM(ch);
-}
-
-/* reading commands */
-
-void readCreateCommand(Channel **topChannelPtr) {
-  //  if (Serial.available() < 2)
-    // return messageError('C');
-
-  char channelId = Serial.read();
-
-  if (!isUpperCase(channelId))
-    return messageError('C', channelId);
-
-  char *desc = (char*) malloc((1 + MAX_DESC_LENGTH) * sizeof(*desc));
-  byte descLen = Serial.readBytesUntil('\n', desc, MAX_DESC_LENGTH);
-  desc[descLen] = '\0';
-
-  if (descLen < MAX_DESC_LENGTH) {
-    // reallocate a shorter buffer
-    desc = (char*) realloc(desc, (1 + descLen) * sizeof(*desc));
-  } else if (descLen == MAX_DESC_LENGTH) {
-    // ignore chars after 15th description character
-    skipLine(Serial);
-  }
-
-  Channel *ch = Channel::create(channelId, desc, descLen);
-
-  // if creating first channel
-  if (*topChannelPtr == nullptr) {
-    debug_println(F("DEBUG: ^ was first channel"));
-    *topChannelPtr = ch;
-  }
-
-  _EEPROM::updateEEPROM(ch);
-}
-
-void readValueCommand(char cmdId) {
-  // only 1 char entered
-  // if (Serial.available() < 2) {
-  //   debug_println(F("DEBUG: No channel ID:"));
-  //   return messageError(cmdId);
-  // }
-
-  char channelId = Serial.read();
-
-  if (!isUpperCase(channelId)) {
-    debug_println(F("DEBUG: Invalid channel ID:"));
-    return messageError(cmdId, channelId);
-  }
-
-  char valueS[4];
-  size_t lenRead = Serial.readBytesUntil('\n', valueS, 3);
-  valueS[lenRead] = '\0';
-
-  // message too short
-  if (lenRead == 0) {
-    debug_println(F("DEBUG: No value:"));
-    return messageError(cmdId, channelId);
-  }
-
-  // message too long
-  if (lenRead == 3 && Serial.peek() != '\n') {
-    debug_println(F("DEBUG: Too long:"));
-    return messageError(cmdId, channelId, valueS);
-  }
-
-  // remove 'trailing' newline from Serial buffer
-  Serial.read();
-
-  char *temp;
-  long value = strtol(valueS, &temp, 10);
-  // message invalid number
-  if (*temp != '\0') {
-    debug_println(F("DEBUG: Not numeric:"));
-    return messageError(cmdId, channelId, valueS);
-  } else if (isOutOfByteRange(value)) {
-    debug_println(F("DEBUG: Outside of 0-255:"));
-    return messageError(cmdId, channelId, valueS);
-  }
-
-  Channel *ch = Channel::channelForId(channelId);
-  // if channel hasn't been created, don't do anything
-  if (ch == nullptr)
-    return;
-
-  DEBUG_ID(channelId);
-  debug_print(value);
-  debug_print(F(" = "));
-
-  switch (cmdId) {
-    case 'V':
-      debug_println(F("data"));
-      ch->setData(value);
-      break;
-    case 'X':
-      debug_println(F("max"));
-      ch->max = value;
-      break;
-    case 'N':
-      debug_println(F("min"));
-      ch->min = value;
-      break;
-  }
-
-  _EEPROM::updateEEPROM(ch);
-}
-
-void messageError(char cmdId) {
-  Serial.print(F("ERROR:"));
-  Serial.print(cmdId);
-  if (cmdId != '\n')
-    printRestOfMessage();
-}
-
-void messageError(char cmdId, char channelId) {
-  Serial.print(F("ERROR:"));
-  Serial.print(cmdId);
-  Serial.print(channelId);
-  printRestOfMessage();
-}
-
-void messageError(char cmdId, char channelId, const char *readSoFar) {
-  Serial.print(F("ERROR:"));
-  Serial.print(cmdId);
-  Serial.print(channelId);
-  Serial.print(readSoFar);
-  printRestOfMessage();
-}
-
-// instead of reading entire message then printing it to serial
-// we can just read a char then immediately print it
-void printRestOfMessage() {
-  while (Serial.available()) {
-    char read = Serial.read();
-    if (read == '\n')
-      break;
-    Serial.print(read);
-  }
-  Serial.println();
 }
 
 /* display */
