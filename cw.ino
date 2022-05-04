@@ -11,14 +11,10 @@
 
 // implementation flags
 #define DEBUG true
-#define RECENT_MODE ARRAY // RECENT: LL/ARRAY/EMA
+#define RECENT_MODE LL // RECENT: LL/ARRAY/EMA
 
 #ifndef DEBUG
   #define DEBUG false
-#endif
-
-#ifndef RECENT_MODE
-  #error You must define a value for RECENT_MODE
 #endif
 
 #if DEBUG
@@ -30,23 +26,16 @@
 #endif
 
 #define DEBUG_ID(channelId) debug_print(F("DEBUG: ")); debug_print(channelId); debug_print(F(" - "));
-#define boolstr(b) ((b) ? F("true") : F("false"))
+
+#ifndef RECENT_MODE
+  #error You must define a value for RECENT_MODE (LL/ARRAY/EMA)
+#endif
 
 // RECENT
 #if RECENT_MODE == LL
-  #define MAX_RECENT_SIZE 10 //! 10?
-  // 439 -> 234
-  // 457 -> 327
+  #define MAX_RECENT_SIZE 4
 #elif RECENT_MODE == ARRAY
   #define RECENT_ARRAY_SIZE 1 //! 10-15?
-  // 457 -> 157(?!)
-  // 439 -> 163 (275 ~ 11 each)
-  // 439 -> 175 -2> 163
-
-  // 439? -> 163 -2> 163
-  // 439 ->
-
-  // 457 ->
 #elif RECENT_MODE == EMA
   #define ALPHA 47.0
 #else
@@ -111,7 +100,7 @@ typedef enum {
   BUTTON_PRESSED,
 } State;
 
-// used to pass info about previously read serial between methods
+// used to store info about previously read serial messages
 typedef struct serialinput_s {
   // len(CA123456789012345) = 17
   static constexpr byte INPUT_LEN = 17;
@@ -126,22 +115,8 @@ typedef enum {
   RIGHT_MAX,
 } HciState;
 
-/*
-Benefits of implementing channels as a LL instead of array[26]:
-- better memory usage as memory for a channel will be allocated on demand
-- easier to get prev/next channel if some channels haven't been created
-
-I could've used:
-  Channel *array[26];
-  for (size_t i = 0; i < 26; i++)
-    array[i] = nullptr;
-ahh I think that might be better
- - easier getting previous channel
- - logic is simpler cos not implementing linkedlist
-*/
-// singly-linked-list, impl. similar to Java's TreeSet
+// ordered singly-linked-list
 // creating new channel will just insert it between 2 nodes
-// takes 21 -> ~103 bytes
 typedef struct channel_s {
   channel_s(char id, const char *desc, byte descLen) {
     this->id = id;
@@ -174,11 +149,9 @@ private:
   // RECENT
 #if RECENT_MODE == LL
   /*
-  was difficult to think of how to impl RECENT!
-  basic singly-linked-list with only tail addition (polling? is that the term)
-  but with a max size, which once reached, adding will discard head value
-  it's a Queue! FIFO
-  */
+   * singly-linked-list used as a queue with a max size, which once reached,
+   * adding will discard head value
+   */
   typedef struct node_s {
     node_s(byte val) {
       this->val = val;
@@ -214,16 +187,6 @@ private:
     recentTail->next = node;
     recentTail = node;
     recentLen++;
-  }
-
-  // debug - to help check if old recentHead gets deleted once reached max size
-  bool _addedSixty = false;
-  void _addSixtyRecentsOnce() {
-    if (!_addedSixty) {
-      for (uint i = 0; i < 60; i++)
-        addRecent(random(0, 256));
-      _addedSixty = true;
-    }
   }
 
   // debug
@@ -305,6 +268,16 @@ private:
   }
 #endif
 
+  // // debug
+  // bool _addedSixty = false;
+  // void _addSixtyRecentsOnce() {
+  //   if (!_addedSixty) {
+  //     for (uint i = 0; i < 60; i++)
+  //       addRecent(random(0, 256));
+  //     _addedSixty = true;
+  //   }
+  // }
+
 public:
   bool valueHasBeenSet() const {
 #if RECENT_MODE == LL
@@ -316,18 +289,13 @@ public:
 #endif
   }
 
-  void setData(byte value) {
-    addRecent(value);
-//! #if RECENT_MODE == LL
-//     // _addSixtyRecentsOnce();//!
-//     addRecent(value);
-//     // _printAllRecent();//!
-// #elif RECENT_MODE == ARRAY
-//     addRecent(value);
-// #else
-//     data = value;
-//     addRunningAvrg(value);
+  void setData(byte val) {
+// #if RECENT_MODE == LL
+//     // debug
+//     _addSixtyRecentsOnce();
+//     // _printAllRecent();
 // #endif
+    addRecent(val);
   }
 
   byte getData() const {
@@ -1237,11 +1205,10 @@ void _printChannelsFull(Channel* head) {
 // debug HCI
 void _printHciState(HciState hciState) {
   debug_print(F("DEBUG: HciState: "));
-  if (hciState == NORMAL) {
+  if (hciState == NORMAL)
     debug_println(F("NORMAL"));
-  } else if (hciState == LEFT_MIN) {
+  else if (hciState == LEFT_MIN)
     debug_println(F("LEFT_MIN"));
-  } else {
+  else
     debug_println(F("RIGHT_MAX"));
-  }
 }
