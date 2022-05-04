@@ -571,7 +571,7 @@ namespace UDCHARS {
  * Displayed on the bottom line of the select display
  */
 namespace FREERAM {
-  void displayFreeMemory(int row = BOTTOM_LINE);
+  void displayFreeMemory(byte row = BOTTOM_LINE);
 
   namespace { // 'private', helper methods
     // week 3 lab
@@ -587,7 +587,7 @@ namespace FREERAM {
     }
   }
 
-  void displayFreeMemory(int row) {
+  void displayFreeMemory(byte row) {
     lcd.setCursor(1, row);
     lcd.print(F("Free bytes:"));
     lcd.print(freeMemory());
