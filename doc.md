@@ -116,10 +116,6 @@ I also feel like my program didn't properly reflect a proper finite-state machin
 
 But I felt that this did not make sense to be a state as the program flow for this would be more akin to a flowchart than a state machine.
 
-
-// TODO: when valueCommand happens and hciState != normal, backlight will update
-// but the displayed stuff wont update to necessarily not show the channel
-
 ## Extension Features {.unnumbered}
 
 * *For each extension feature you have implemented describe the
@@ -205,14 +201,19 @@ This is called by `selectDisplay()`; once SELECT has been held for at least 1 se
 HCI is implemented using a finite state machine with the states:
 
 - NORMAL
+  - display all channels
 - LEFT_MIN
+  - display channels where the current value is beyond the minimum
 - RIGHT_MAX
+  - display channels where the current value is beyond the maximum
 
 ![HCI FSM](doc/hci_fsm.svg)
 
 <!--
 http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00
 -->
+
+
 
 ## EEPROM
 

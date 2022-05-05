@@ -39,7 +39,7 @@
 #elif RECENT_MODE == EMA
   #define ALPHA 47.0
 #else
-  #error RECENT_MODE is defined as an invalid value (LL/ARRAY/EMA)
+  #error RECENT_MODE is defined as an invalid value, has to be one of: LL, ARRAY, EMA
 #endif
 
 #define STUDENT_ID             "F120840"
@@ -70,8 +70,8 @@
 #define displayTopChannel(ch)    displayChannel(TOP_LINE, ch)
 #define displayBottomChannel(ch) displayChannel(BOTTOM_LINE, ch)
 
-#define isCreateCommand(cmdId)  ((cmdId) == 'C')
-#define isValueCommand(cmdId)   ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
+#define isCreateMessage(cmdId)  ((cmdId) == 'C')
+#define isValueMessage(cmdId)   ((cmdId) == 'V' || (cmdId) == 'X' || (cmdId) == 'N')
 #define isOutOfByteRange(value) ((value) < 0 || (value) > 255)
 
 #define MAX_DESC_LENGTH  15
@@ -99,15 +99,6 @@ typedef enum {
   SELECT_AWAITING_RELEASE,
   BUTTON_PRESSED,
 } State;
-
-// used to store info about previously read serial messages
-typedef struct serialinput_s {
-  // len(CA123456789012345) = 17
-  static constexpr byte INPUT_LEN = 17;
-
-  char input[INPUT_LEN + 1] = "";
-  byte inputLen = 0;
-} SerialInput;
 
 typedef enum {
   NORMAL,
@@ -290,8 +281,7 @@ public:
   }
 
   void setData(byte val) {
-// #if RECENT_MODE == LL
-//     // debug
+// #if RECENT_MODE == LL // debug
 //     _addSixtyRecentsOnce();
 //     // _printAllRecent();
 // #endif
@@ -342,16 +332,13 @@ public:
 
   // HCI
   bool meetsHciRequirement(HciState hciState) const {
-    switch (hciState) {
-      case NORMAL:
-        return true; // no requirement for NORMAL
+    if (hciState == LEFT_MIN)
+      return valueHasBeenSet() && getData() < min;
 
-      case LEFT_MIN:
-        return valueHasBeenSet() && getData() < min;
+    if (hciState == RIGHT_MAX)
+      return valueHasBeenSet() && getData() > max;
 
-      case RIGHT_MAX:
-        return valueHasBeenSet() && getData() > max;
-    }
+    return true; // no requirement for NORMAL, display all channels
   }
 
 
@@ -360,25 +347,40 @@ public:
   // these methods assume provided ID is valid (A-Z)
   static channel_s *create(char id, const char *desc, byte descLen);
   static channel_s *channelForId(char id);
+
   static channel_s *firstChannel(HciState hciState);
+
   static channel_s *channelBefore(const channel_s *ch, HciState hciState);
   static channel_s *channelAfter(const channel_s *ch, HciState hciState);
+
   static bool canGoUp(const channel_s *topChannel, HciState hciState);
   static bool canGoDown(const channel_s *topChannel, HciState hciState);
 private:
   static void insertChannel(channel_s *ch);
 } Channel;
 
+// used to store info about previously read serial messages
+typedef struct serialinput_s {
+  // len(CA123456789012345) = 17
+  static constexpr byte INPUT_LEN = 17;
+
+  char input[INPUT_LEN + 1] = "";
+  byte inputLen = 0;
+
+  Channel **topChannelPtr;
+  HciState hciState;
+} SerialInput;
+
 
 /* function prototypes */
-// reading & handling commands
-void handleSerialInput(Channel **topChannelPtr);
+
+// reading & handling messages
+void handleSerialInput(Channel **topChannelPtr, HciState hciState);
 void resetSerialInput(SerialInput &serialInput);
 void printError(SerialInput &serialInput);
 void processError(SerialInput &serialInput);
-void createCommand(SerialInput &serialInput, Channel **topChannelPtr);
-void valueCommand(SerialInput &serialInput);
-void readValueCommand(char cmdId);
+void handleCreateMessage(SerialInput &serialInput);
+void handleValueMessage(SerialInput &serialInput);
 // display
 void displayChannel(byte row, Channel *ch);
 void displayRightJustified3Digits(uint num);
@@ -389,10 +391,11 @@ void selectDisplay();
 // utils
 void skipLine(Stream &s);
 // debug
-void _printChannelIds(const Channel *head);
 void _printChannel(const Channel *ch, bool newLine = true);
 void _printChannelsFull(Channel* head);
+void _printChannelsIds(const Channel *head);
 void _printHciState(HciState hciState);
+
 
 Channel *Channel::headChannel = nullptr;
 
@@ -437,6 +440,7 @@ Channel *Channel::create(char id, const char *desc, byte descLen) {
   return ch;
 }
 
+// returns the channel with the provided id, or nullptr if not yet created
 Channel *Channel::channelForId(char id) {
   Channel *node = headChannel;
 
@@ -449,6 +453,8 @@ Channel *Channel::channelForId(char id) {
   return nullptr;
 }
 
+// returns the first channel that meets the provided HciState
+// essentially the head of the channel linked-list for that HciState
 Channel *Channel::firstChannel(HciState hciState) {
   Channel *ch = headChannel;
 
@@ -461,6 +467,8 @@ Channel *Channel::firstChannel(HciState hciState) {
   return nullptr;
 }
 
+// returns the channel before the provided channel, that meets the requirement
+// for the provided HciState
 Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
   if (ch == nullptr)
     return nullptr;
@@ -474,6 +482,11 @@ Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
 
   while (prev != nullptr) {
     Channel *next = channelAfter(prev, hciState);
+
+    // early exit if gone past provided channel
+    if (next->id > ch->id)
+      return nullptr;
+
     if (next == ch)
       return prev;
     prev = next;
@@ -482,6 +495,8 @@ Channel *Channel::channelBefore(const Channel *ch, HciState hciState) {
   return nullptr;
 }
 
+// returns the channel after the provided channel, that meets the requirement
+// for the provided HciState
 Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
   if (ch == nullptr)
     return nullptr;
@@ -501,32 +516,17 @@ Channel *Channel::channelAfter(const Channel *ch, HciState hciState) {
   return nullptr;
 }
 
+// returns whether there exists a channel before the provided channel, that meets the
+// requirement for the provided HciState
 bool Channel::canGoUp(const Channel *topChannel, HciState hciState) {
-  if (topChannel == nullptr || topChannel == headChannel)
-    return false;
-
-  if (hciState == NORMAL)
-    return true; // topChannel != headChannel
-
-  Channel *node = headChannel;
-
-  // try and find ANY node before topChannel that meets hciState's requirement
-  while (node != nullptr) {
-    if (node->meetsHciRequirement(hciState))
-      return true;
-
-    // early exit if reached topChannel
-    if (node->next == topChannel)
-      break;
-
-    node = node->next;
-  }
-
-  return false;
+  // channelBefore handles nullptr
+  return channelBefore(topChannel, hciState) != nullptr;
 }
 
+// returns whether there exists a channel after the channel after the provided channel,
+// that meets the requirement for the provided HciState
 bool Channel::canGoDown(const Channel *topChannel, HciState hciState) {
-  // channelAfter & channelBefore handle nullptr
+  // channelAfter handles nullptr
   Channel *btmChannel = channelAfter(topChannel, hciState);
   return channelAfter(btmChannel, hciState) != nullptr;
 }
@@ -608,7 +608,6 @@ namespace FREERAM {
  *  - update the stored student ID to not be my student ID
  *  -    "    "     "   channel ID to not be that channel's ID
  *  -    "    "     "   description length to be greater than 15
- *
  */
 namespace _EEPROM {
   #define addressForId(id)        ((id - 'A') * 26)
@@ -763,7 +762,7 @@ void setup() {
   lcd.clear();
 
   // uncomment to 'reset' EEPROM
-  // _EEPROM::_invalidateEEPROM();
+  _EEPROM::_invalidateEEPROM();
 }
 
 void loop() {
@@ -851,7 +850,7 @@ void loop() {
     if (pressedButton != 0)
       state = BUTTON_PRESSED;
 
-    handleSerialInput(&topChannel);
+    handleSerialInput(&topChannel, hciState);
 
     updateDisplay(topChannel, hciState);
     break;
@@ -882,7 +881,7 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel);
+    handleSerialInput(&topChannel, hciState);
     break;
 
   case BUTTON_PRESSED:
@@ -892,15 +891,18 @@ void loop() {
       state = MAIN_LOOP;
     }
 
-    handleSerialInput(&topChannel);
+    handleSerialInput(&topChannel, hciState);
     break;
   }
 }
 
-/* reading commands */
+/* reading & handling messages */
 
-void handleSerialInput(Channel **topChannelPtr) {
+void handleSerialInput(Channel **topChannelPtr, HciState hciState) {
   static SerialInput serialInput;
+
+  serialInput.topChannelPtr = topChannelPtr;
+  serialInput.hciState = hciState;
 
   while (Serial.available()) {
     char *input = serialInput.input;
@@ -915,10 +917,10 @@ void handleSerialInput(Channel **topChannelPtr) {
       if (inputLen < 3 || !isUpperCase(input[1]))
         printError(serialInput);
       else {
-        if (isCreateCommand(input[0]))
-          createCommand(serialInput, topChannelPtr);
-        else if (isValueCommand(input[0]) && inputLen <= 5)
-          valueCommand(serialInput);
+        if (isCreateMessage(input[0]))
+          handleCreateMessage(serialInput);
+        else if (isValueMessage(input[0]) && inputLen <= 5)
+          handleValueMessage(serialInput);
         else
           printError(serialInput);
       }
@@ -931,9 +933,9 @@ void handleSerialInput(Channel **topChannelPtr) {
     input[inputLen++] = read;
 
     if (inputLen > SerialInput::INPUT_LEN) {
-      if (isCreateCommand(input[0]) && isUpperCase(input[1])) {
+      if (isCreateMessage(input[0]) && isUpperCase(input[1])) {
         skipLine(Serial);
-        createCommand(serialInput, topChannelPtr);
+        handleCreateMessage(serialInput);
       } else
         processError(serialInput);
 
@@ -966,7 +968,7 @@ void processError(SerialInput &serialInput) {
   }
 }
 
-void createCommand(SerialInput &serialInput, Channel **topChannelPtr) {
+void handleCreateMessage(SerialInput &serialInput) {
   char *input = serialInput.input;
 
   char channelId = input[1];
@@ -979,16 +981,22 @@ void createCommand(SerialInput &serialInput, Channel **topChannelPtr) {
   Channel *ch = Channel::create(channelId, desc, descLen);
 
   // if creating first channel
-  if (*topChannelPtr == nullptr) {
+  if (ch->meetsHciRequirement(serialInput.hciState) &&
+    *serialInput.topChannelPtr == nullptr
+  ) {
+    // this should only happen when hcistate == NORMAL
+    // because a newly created channel should only be displayed
+    // when hciState == NORMAL
     debug_println(F("DEBUG: ^ was first channel"));
-    *topChannelPtr = ch;
+    *serialInput.topChannelPtr = ch;
   }
 
   _EEPROM::updateEEPROM(ch);
 }
 
-void valueCommand(SerialInput &serialInput) {
+void handleValueMessage(SerialInput &serialInput) {
   char *input = serialInput.input;
+  HciState &hciState = serialInput.hciState;
 
   char cmdId = input[0];
   char channelId = input[1];
@@ -1001,7 +1009,8 @@ void valueCommand(SerialInput &serialInput) {
   if (*temp != '\0') {
     debug_println(F("DEBUG: Not numeric:"));
     return printError(serialInput);
-  } else if (isOutOfByteRange(value)) {
+  }
+  if (isOutOfByteRange(value)) {
     debug_println(F("DEBUG: Outside of 0-255:"));
     return printError(serialInput);
   }
@@ -1028,6 +1037,25 @@ void valueCommand(SerialInput &serialInput) {
       debug_println(F("min"));
       ch->min = value;
       break;
+  }
+
+  // HCI
+  // if channel no longer meets current HCI requirement and is the top channel,
+  // 'reset' topChannel
+  if (!ch->meetsHciRequirement(hciState) &&
+    *serialInput.topChannelPtr == ch
+  ) {
+    DEBUG_ID(channelId);
+    debug_println(F("no longer matches current hciState"));
+    *serialInput.topChannelPtr = Channel::firstChannel(hciState);
+  }
+  // if channel was the first channel that matches hciState, make it the top channel
+  else if (ch->meetsHciRequirement(hciState) &&
+    *serialInput.topChannelPtr == nullptr
+  ) {
+    DEBUG_ID(channelId);
+    debug_println(F("now matches current hciState"));
+    *serialInput.topChannelPtr = ch;
   }
 
   _EEPROM::updateEEPROM(ch);
@@ -1068,6 +1096,7 @@ void clearChannelRow(byte row) {
   lcd.print(F("               "));
 }
 
+// display current channels
 void updateDisplay(Channel *topChannel, HciState hciState) {
   updateBacklight();
 
@@ -1090,11 +1119,11 @@ void updateDisplay(Channel *topChannel, HciState hciState) {
 }
 
 /*
-- All values in every channel in range: white
-- Any number above max: red
-- Any number below min: green
-- If both: yellow
-*/
+ * - All values in every channel in range: white
+ * - Any number above max: red
+ * - Any number below min: green
+ * - If both: yellow
+ */
 void updateBacklight() {
   // take advantage of the fact that YELLOW == RED | GREEN
   uint color = 0;
@@ -1102,7 +1131,7 @@ void updateBacklight() {
   Channel *ch = Channel::headChannel;
 
   while (ch != nullptr) {
-    // ignore channel if its value hasn't been set by a command
+    // ignore channel if its value hasn't been set
     if (!ch->valueHasBeenSet()) {
       ch = ch->next;
       continue;
@@ -1124,6 +1153,7 @@ void updateBacklight() {
   lcd.setBacklight(color);
 }
 
+// display my student ID and the amount of free memory
 void selectDisplay() {
   lcd.setBacklight(PURPLE);
 
@@ -1134,30 +1164,10 @@ void selectDisplay() {
   FREERAM::displayFreeMemory();
 }
 
-/* Utility functions */
+/* utils */
 
 void skipLine(Stream &s) {
   s.find('\n');
-}
-
-// debug
-void _printChannelIds(const Channel *head) {
-  debug_print(F("DEBUG: channels=["));
-
-  if (head == nullptr) {
-    debug_println(']');
-    return;
-  }
-
-  debug_print(head->id);
-  Channel *node = head->next;
-  while (node != nullptr) {
-    debug_print(',');
-    debug_print(node->id);
-    node = node->next;
-  }
-
-  debug_println(']');
 }
 
 // debug
@@ -1187,6 +1197,7 @@ void _printChannel(const Channel *ch, bool newLine) {
     debug_println();
 }
 
+// debug
 void _printChannelsFull(Channel* head) {
   if (head == nullptr) {
     debug_println(F("[]"));
@@ -1203,6 +1214,26 @@ void _printChannelsFull(Channel* head) {
   }
 
   debug_println(F("DEBUG: ]"));
+}
+
+// debug
+void _printChannelsIds(const Channel *head) {
+  debug_print(F("DEBUG: channels=["));
+
+  if (head == nullptr) {
+    debug_println(']');
+    return;
+  }
+
+  debug_print(head->id);
+  Channel *node = head->next;
+  while (node != nullptr) {
+    debug_print(',');
+    debug_print(node->id);
+    node = node->next;
+  }
+
+  debug_println(']');
 }
 
 // debug HCI
