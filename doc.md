@@ -168,17 +168,13 @@ To held with the length of timeouts, I used macros:
 
 ## Debugging
 
-* *if you have code used to help you debug that is now commented out or
-  managed by C macros, then keep this in your submission.  If you have
-  other things to say, then put them here.*
-
 Debug functions generally start with '`_`', and are commented with '`// debug`'.
 
-The program will only send debug messages if the `DEBUG` macro is defined as a truthy value (non-zero number).
+The program will only send debug messages if the `DEBUG` macro is defined as a non-zero number.
 
-Right after syncronisation, the program sends a few debug messages about the channels that have been created from the EEPROM.
+Right after syncronisation, the program sends multiple debug messages about the channels that have been created using values read from the EEPROM.
 
-Whenever an erroneous message is sent, a DEBUG message about it is sent just before the ERROR message.
+Whenever an erroneous message (not conforming to the protocol) is sent, a DEBUG message about it is sent just before the ERROR message.
 
 ## Reflection
 
