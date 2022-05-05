@@ -178,9 +178,6 @@ Whenever an erroneous message (not conforming to the protocol) is sent, a DEBUG 
 
 ## Reflection
 
-* *200–500 words of reflection on your code.  Include those things that
-  don’t work as well as you would like and how you would fix them.*
-
 I am mostly happy with my code, everything works as desired.
 
 Though I am kind of unhappy that I mixed C & C++ constructs and did not really try to stick to one.
