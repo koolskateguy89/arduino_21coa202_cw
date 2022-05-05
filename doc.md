@@ -297,7 +297,9 @@ The mechanism to determine whether the values were written by me is a 3 step pro
 2. Check that the written ID matches the ID of the channel that should be written in that address
 3. Check that the written description length is between 1 and 15 inclusive
 
-Therefore, it is simple to 'invalidate' any written channel: by modifying the values written such that they fail any step in the above process. For example setting the written ID to '@', similar to what is done by `_EEPROM::invalidateChannel(char)` and `_EEPROM::invalidateEEPROM()`.
+Therefore, it is simple to 'invalidate' any written channel: by modifying the values written such that they fail any step in the above process.
+For example setting the written ID to '@', similar to what is done by `_EEPROM::invalidateChannel(char)` and `_EEPROM::invalidateEEPROM()`.
+Please see lines 764 - 765 in the code.
 
 Although writing my student ID with every channel feels a bit excessive, I think it is the best mechanism to be able to verify that the values were written by **me** without being complicated.
 
