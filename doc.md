@@ -13,9 +13,15 @@ date: Semester 2
 http://www.plantuml.com/plantuml/uml/XPBFZfim4CRlVegvHQesQdlbK2sxeGrI2ZGGfLMf8e8dYLKpHhRPTj--9Y4i4Acv83oUR_xu-pqQMsZRL9AT14V0ghQlmD6KMjHMA68iZC8iz5TXwcTX77bWq89LzVEf84Bv0DsFvvsmuDt19G0rKjPMvvIpLc9GOcaJZSPaei87gDjVv4-DjOfQmGUM_eYUb-iu6lNQ5-LlAOwdjYiactMo2d8oI1nctsQWNb13YbeKCYTGL2BKBcAmLCIP_paBrhksh0TdYHJ6WZg0g6g95P95xcJuro8PjwqPrxjflrs6MS2--c6qMyLnuW4NffR5AvINlKrEjLOb6WE2IbK9EaBbJiKHtTMVGbWuA0txyywN5s1fi0gUizqoM2qyw5CkqRRd7k64iXspZNyquBuQ9HO6-LNiRtrdKlHbjtPdFmtU1ZEsuKWMmiNTqMxxzcsUDbaMHxja7QHfC1pJMAMHTmjDLFzfoDZFTxzW_Wd6S4rOWxdBc30nPgJB6Tey-pu3ZIMA5-HmqAhgt1omSDRq9h8tFyyNGp-wmvLLo6a-d-TqMRkFMiVpfCZqmJR9-qMyZGQ5nYMw1-pgjpGTyUeXyXulDgHbEEqKW7xo5fqEd1jjFtAVVO-hUx89ADFqCIszwX69DvNy1m00
 -->
 
-#### INITIALISATION {.unnumbered}
+My code includes other FSMs in the extensions. With all extensions implemented, the main FSM changes to (changes highlighted by italics):
 
-Write a description of your states, what is being waited for, and the actions take during transition between states.
+![Main FSM With Extensions](doc/main_fsm_extensions.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/XLFHRfim57tdA-vRfAaHssiUfjA4DaWfC23gfZ553huDreoDRDEkVpz32A6UjBv4s3xdtdlEFRdLXYZJDToh6KN0fZLlG55NYhM6IU5vKHmLKR2Byg28adW56WqOsQvh8WJo6nW_LgiQ2HqF5W2YuxmrgXIbrrCqSgnCgb3hWZLu0st_YVIkCqQAdl2vX_e-nMSc4AfE6za0KKg-GbKJHIg3IiEpLB3VhBT1blk-b_-8rziiYTzDToJLRyvETJydfFiitOMbq2WeBBujGBwWWXmL8xmK84M5qAAon4eAwWNtHPWT-h8h62YSQGFo6LZJScnG6AIMXdyC2ctzqU_h_TF-QHiLjhllAoGKghCzLeMosi8mpP97g-8nYEB3BadI5L2cMqxU9cGfMYKhr1gOg6J3n0aQUo8dj4-lX9d1aEDWujbIBmztuReuRCFTPWKJv7pRZtH4g97tAlhxBnhihqAEH2Eza8Edm6uzVZXazXpauNKmRJgAma2qwLLTRaaZEp7uH5u8u-J84V8iiE8-5k1ETntcRbyKINn8ip3FmxaORQH2EifsMFzfw7a_F_s2vLTudsaduh2q22TORj06p3mhY-yBK5WXUq4wR7UCn2nG0sTQjNVT-l0mtzfukFn5e1JBvR8KPzdJhM4DEaLSm_QflqcUOdyNtXT-5ZrivpNdrIOlnrPz_4vuMJfUa-lDupKVt4tC9ABFsfWqXpjpOq9_5CIFQ4vc7BWJd8brYu9s3VyB
+-->
+
+#### INITIALISATION {.unnumbered}
 
 This state carries out the actions involved in initialising and setting up the system. Once complete, the system enters the `SYNCHRONISATION` state.
 
@@ -54,12 +60,6 @@ This is 'blocking', if multiple buttons are pressed, only the actions for the fi
 
 Once the button is released, the system enters back into the `MAIN_LOOP` state.
 
-* *If there are other (sub) FSMs in your code then indicate those here.*
-
-My code includes other FSMs in the extensions.
-
-**TODO: FSM after all extensions*
-
 ## Data structures {#ds}
 
 ### Types
@@ -89,7 +89,7 @@ Table: `Channel` struct
 | unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
 
-NOTE: This struct has more attritbutes, which are determined by the macro `RECENT_MODE`, see \S\ref{RECENT}.
+NOTE: This struct has more attributes, which are determined by the macro `RECENT_MODE`, see \S\ref{RECENT}.
 
 The instances of `Channel` are:
 
@@ -210,7 +210,7 @@ The following macros were defined, for use when creating and displaying the cust
 - `UP_ARROW_CHAR`   0
 - `DOWN_ARROW_CHAR` 1
 
-The change to the FSM was that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
+The change to the FSM was that in the `INITIALISATION` state, the custom characters are defined:
 
 ![UDCHARS FSM Change](doc/udchars/fsm_change.svg)
 
@@ -371,8 +371,6 @@ Although writing my student ID with every channel feels a bit excessive, I think
 
 ## RECENT {#RECENT}
 
-*In documentation, indicate the names and locations of the data structures used to store the recent values*
-
 *running sum?*
 
 As RECENT seems to be impossible without making any compromise, it is implemented in 3 different ways, which make different compromises:
@@ -394,8 +392,11 @@ If `RECENT_MODE` is defined as any other value, the program will not compile, it
 The compromise made by this implementation is...
 
 I use a queue (implemented with a singly-linked-list), with a maximum size defined by the macro `MAX_RECENT_SIZE`, which once exceeded will discard the head value to manage the most recent values for a channel.
+I thought this was a genius solution as it dynamically allocates memory, no memory would be 'wastefully' allocated.
 
-`Channel#recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
+`Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
+
+Table: `Channel` struct extra attributes
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -408,6 +409,8 @@ I use a queue (implemented with a singly-linked-list), with a maximum size defin
 The compromise made by this implementation is...
 
 I use a circular byte array of size `RECENT_ARRAY_SIZE`, overwriting the oldest value once a new value has been entered (after more than `RECENT_ARRAY_SIZE` values have been entered).
+
+Table: `Channel` struct extra attributes
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -434,10 +437,20 @@ Memory comp assumes storing 64 values
 
 ### Exponential Moving Average
 
-The compromise made by this implementation is that the most recent values are not actually stored, and it is an estimation (but the other implementations also technically are).
-However, this 'should' (**todo: maybe test?**) give a closer estimate to the average of the most recent 64 values than the other two implementations as this taken the last 64 values into account, whereas the others will take into account their max size. **todo reword max size I think**
+The compromise made by this implementation is that the most recent values are not actually stored, and it is an estimation (though the other implementations are also estimations for the average of the most recent 64 values).
+However, this _should_ give a closer estimate to the average of the most recent 64 values than the other two implementations as this takes the last 64 values into account, whereas the others can only take into account a very limited number of values.
 
-I had to make a choice between using the average of all values entered and using an exponential moving average (EMA). I decided to implement an EMA as it is more accurate for the average of the last 64 values. More specifically, as the numbers of values entered increases, the more accurate an EMA is over a total average.
+I had to make a choice between using the average of all values entered and using an exponential moving average (EMA).
+I decided to implement an EMA as it is more accurate for the average of the last 64 values.
+More specifically, as the numbers of values entered increases, the more accurate an EMA is over a total average.
+
+Table: `Channel` struct extra attributes
+
+| Type | Name | Description |
+| --- | --- | --- |
+| byte | data | The most recent value |
+| double | runningAvrg | The current estimated average |
+| unsigned long | nRecents | The number of values entered |
 
 The EMA implementation is based upon this formula:
 
@@ -498,39 +511,34 @@ For example, after a `CAMain` message, the Arduino should look like:
 
 ## SCROLL {#SCROLL}
 
-*In documentation, highlight parts of FSM required for this particular requirement and the LoC and functions that carry this implementation*
-
 SCROLL and NAMES were implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
+SCROLL is implemented by essentially dispalying a moving substring of the channel description.
+
+This is carried out in `NAMES_SCROLL::displayChannelName(int, Channel*` by using `Channel#scrollIndex` to keep track of the start index of this substring and `Channel#lastScrollTime` to keep track of the last time a scroll happened (to scroll over every 500ms).
+
 It is implemented using a flowchart:
-![SCROLL Flowchart](doc/scroll_flowchart.svg)
+
+![SCROLL Flowchart](doc/scroll/scroll_flowchart.png)
 
 <!--
-http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000
+http://www.plantuml.com/plantuml/uml/TOynJyCm48Nt-nLlJ0UaB2oDA4MqGwKA8NLYggpuGYpPvyZd2FZtE35CK4ydltVVP-yrcvJdu6aTYBRQf-ZzIIn_uW5jHvHuOfC9S0EQ41CZZqPmtxP1eKvwXZUQKJSVDoLcGVF5kY6iPrjAYGFBRmbkuNThp5uPZSHQPh5kMARLbjZq8zlb5d60vRBkfkoY_Alvy_PR_FebV8pEbsp1LYeyotiUiSFXU7c-7awNr_FJs_LyV2a-fp-skvt4ZaXpd6ZFOkVWlm40
 -->
-
-This essentially displays a moving substring of the channel description.
-
 
 ### Example
 
 For example, the message `CA0123456789` is sent.
 
-~~~bash
-pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --shift-heading-level-by=-1
+The display should initially look like:
 
-pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
+![Start of Channel Description\label{scroll-start}](doc/scroll/start.jpg)
 
+Then after 500ms, it should scroll a character, and look like:
 
-pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --toc && clear
+!['Middle' of Channel Description](doc/scroll/start.jpg)
 
+Once the end of the channel description has been reached:
 
+![End of Channel Description](doc/scroll/end.jpg)
 
-pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --highlight-style my_style.theme
-
---highlight-style=STYLE
-~~~
-
-### Gradescope Tagging
-
-After deleting the sections from submission onwards there should be a tag on every page.  If you have an untagged page, then find a tag for it.  There are tags for the title page, data structure pages, fsms, testing and each extension.
+Scrolling should then start again, and the display should look like \ref{scroll-start}.
