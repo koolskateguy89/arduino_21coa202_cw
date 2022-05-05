@@ -761,7 +761,7 @@ void setup() {
   lcd.begin(16, 2);
   lcd.clear();
 
-  // uncomment to 'reset' EEPROM
+  // uncomment to 'reset'/invalidate entire EEPROM
   _EEPROM::_invalidateEEPROM();
 }
 
