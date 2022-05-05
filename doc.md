@@ -371,30 +371,29 @@ Although writing my student ID with every channel feels a bit excessive, I think
 
 ## RECENT {#RECENT}
 
-*running sum?*
-
 As RECENT seems to be impossible without making any compromise, it is implemented in 3 different ways, which make different compromises:
 
 1. using a [queue with a maximum size](#queue-linked-list)
 2. using a [circular array](#circular-array)
 3. using an [exponential moving average](#exponential-moving-average)
 
-You can choose which one the program uses by changing the macro `RECENT_MODE`, it should only be defined as one of the following defined macros:
+You can choose which one the program uses by changing the macro `RECENT_MODE`.
+ It is designed to be effectively an enum; its value should only be as one of the following defined macros:
 
 - `LL` (linked list as queue)
 - `ARRAY` (circular array)
 - `EMA` (exponential moving average)
 
-If `RECENT_MODE` is defined as any other value, the program will not compile, it is effectively an enum.
+If `RECENT_MODE` is defined as any other value, the program will not compile.
 
 ### Queue (Linked List)
 
-The compromise made by this implementation is...
+The compromise made by this implementation is that not all 64 values can be stored, unless another compromise is made elsewhere, e.g. limiting the number of channels that can be created.
 
-I use a queue (implemented with a singly-linked-list), with a maximum size defined by the macro `MAX_RECENT_SIZE`, which once exceeded will discard the head value to manage the most recent values for a channel.
-I thought this was a genius solution as it dynamically allocates memory, no memory would be 'wastefully' allocated.
+I use a queue (implemented with a singly-linked-list), with a maximum size defined by the macro `MAX_RECENT_SIZE`, which once exceeded will discard the head value.
+I thought this was a genius solution as it only allocated memory when needed, no memory would be 'wastefully' allocated.
 
-`Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
+`Channel#recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
 
 Table: `Channel` struct extra attributes
 
@@ -406,7 +405,7 @@ Table: `Channel` struct extra attributes
 
 ### Circular Array
 
-The compromise made by this implementation is...
+The compromise made by this implementation is that not all 64 values can be stored, unless another compromise is made elsewhere, e.g. limiting the number of channels that can be created.
 
 I use a circular byte array of size `RECENT_ARRAY_SIZE`, overwriting the oldest value once a new value has been entered (after more than `RECENT_ARRAY_SIZE` values have been entered).
 
@@ -419,19 +418,11 @@ Table: `Channel` struct extra attributes
 
 ### Queue vs Circular Array
 
-As using a queue or circular array both store the entered values, a direct comparison between them makes sense to do. **TODO reword**
+As using a queue or circular array make the same compromise, it makes sense to compare them.
 
-While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
+While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), its memory usage will increase very quickly. Assuming `MAX_RECENT_SIZE` = 64, once 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
 
-
-
-But using a linked list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
-
-
-Although using a a circular array would initially use less memory than a linked list, in the long run the array would use less memory, thus allowing an array of a larger size than the maximum size of the linked list, giving a more accurate average of the last 64 values.
-
-
-Memory comp assumes storing 64 values
+As the array uses less memory, it allows for an array of a larger size than the maximum size of the linked list, which _should_ give a more accurate average of the last 64 values.
 
 ![Memory Usage Comparison](doc/recent/memory_comp.png)
 
@@ -452,28 +443,29 @@ Table: `Channel` struct extra attributes
 | double | runningAvrg | The current estimated average |
 | unsigned long | nRecents | The number of values entered |
 
-The EMA implementation is based upon this formula:
-
-*TODO: dont try and explain how it works, but explain the problem with when <64 values have been entered (use wikipedia page?), and how i solved it by essentially using a total average*
-
-$$y[n] = \alpha x[n] + (1 - \alpha)y[n - 1]$$
+The EMA implementation is based upon the recursive formula (from the [Wikipedia page](https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average)):
 
 \begin{equation}
   y[n] = \alpha x[n] + (1 - \alpha)y[n - 1]
 \end{equation}
 
+Where:
 
-In my implementation of an EMA, the average of the first 64 values is pretty much exaxtrasasdsadasda
+ - $\alpha$ is the weighting for the new value
+ - $y[n]$ is the new average
+ - $y[n-1]$ is the old average
+ - $x[n]$ is the most recent value
 
-**TODO: best alpha line graph**
+A drawback of using an EMA is that the early results are unreliable as the spin-up interval is not completed. In this implementation, the spin-up interval would be the first 64 values being entered.
 
-It makes sense to do as you won't be able to store the 64 most recent values anyway, and thus calculating the average of the e.g. 32 most recent values will be as estimate for the average of the 64. So a compromise has to be made of estimating
+I was able to overcome this drawback by constantly changing $\alpha$ while less than 64 values have been entered. Thus making the average of the first 64 values is very nearly exact.
 
-| Type | Name | Description |
-| --- | --- | --- |
-| byte | data | The current value of this channel |
-| double | runningAvrg | The current average |
-| unsigned long | runningSumN | The number of values that have been entered to this channel |
+Once more than 64 values have been entered, I used an $\alpha$ value of $\frac{1}{47}$.
+I created a Kotlin script (see Appendix) to calculate what the best $\alpha$ value would be (see comments in `Channel::addRecent` when `RECENT_MODE` == `LL`), the results were:
+
+- $\alpha$ values roughly between $\frac{1}{53}$ and $\frac{1}{57}$ were best for when roughly 100 values were entered
+- $\alpha$ values roughly between $\frac{1}{44}$ and $\frac{1}{48}$ were best for when more than 300 values were entered
+- As the number of values increased, a higher $\alpha$ value was better, until about $\frac{1}{45}$, whence the average estimate would be further from the exact average
 
 ## NAMES
 
@@ -542,3 +534,115 @@ Once the end of the channel description has been reached:
 ![End of Channel Description](doc/scroll/end.jpg)
 
 Scrolling should then start again, and the display should look like \ref{scroll-start}.
+
+## Appendix {.unnumbered}
+
+#### SCROLL Kotlin Script {#scroll-kt .unnumbered}
+
+~~~ {.kotlin .numberLines}
+import kotlin.math.absoluteValue
+
+// to see difference when using total average
+const val TOTAL_AVERAGE = 0
+
+fun main(vararg args: String) {
+    val results = mutableMapOf<Int, MutableList<Double>>()
+
+    repeat(1_000) {
+        val a = Alpha(300)
+        a()
+        a.avrgDiffResults.forEach { (alpha, diff) ->
+            results.computeIfAbsent(alpha) { mutableListOf() }
+                .add(diff)
+        }
+    }
+
+    results.mapValues { (alpha, diffs) -> diffs.average() }
+        .apply {
+            toSortedMap { d1, d2 ->
+                // sort by ascending avrg (best avrg diff first)
+                val a1 = this[d1]!!
+                val a2 = this[d2]!!
+                a1.compareTo(a2)
+            }.forEach { (alpha, avrgDiff) ->
+                if (alpha == TOTAL_AVERAGE)
+                    println(" TOTAL  =  $avrgDiff".format(alpha))
+                else
+                    println("1 / %-2d  =  $avrgDiff".format(alpha))
+            }
+        }
+}
+
+class Alpha(val nRecents: Int) {
+    val alphas = (2..64) + TOTAL_AVERAGE
+
+    val alphasAvrgs = mutableMapOf<Int, Double>().apply {
+        alphas.forEach {
+            this[it] = 0.0
+        }
+    }
+    val results = mutableMapOf<Int, MutableList<Double>>()
+    val avrgDiffResults = mutableMapOf<Int, Double>()
+
+    private val randomByte: Int
+        get() = (0..255).random()
+
+    val values = mutableListOf<Int>().apply {
+        repeat(64) {
+            add(randomByte)
+        }
+    }
+
+    operator fun invoke() {
+        val startAvrg = values.average()
+        alphas.forEach {
+            alphasAvrgs[it] = startAvrg
+        }
+        alphasAvrgs[TOTAL_AVERAGE] = values.sum().toDouble()
+
+        for (i in 65..nRecents) {
+            val added = randomByte.also { values.add(it) }
+            val exact = values.averageLast(64)
+
+            alphas.forEach {
+                val diff: Double
+                if (it == TOTAL_AVERAGE) {
+                    val sum: Double = alphasAvrgs.getValue(it) + added
+                    alphasAvrgs[it] = sum
+
+                    val avrg: Double = sum / values.size
+
+                     diff = (exact - avrg).absoluteValue
+                } else {
+                    val alpha: Double = 1.0 / it
+
+                    var runningAvrg = alphasAvrgs.getValue(it)
+                    runningAvrg = alpha * added + (1 - alpha) * runningAvrg
+                    alphasAvrgs[it] = runningAvrg
+
+                    diff = (exact - runningAvrg).absoluteValue
+                }
+
+                results.computeIfAbsent(it) { mutableListOf() }
+                    .add(diff)
+            }
+        }
+
+        // calculate avrgDiffResults
+        results.forEach { (alpha, diffs) ->
+            avrgDiffResults[alpha] = diffs.average()
+        }
+    }
+}
+
+fun List<Int>.averageLast(n: Int): Double {
+    var sum: Double = 0.0
+    var count: Int = 0
+
+    for (i in this.lastIndex downTo this.lastIndex - n + 1) {
+        sum += this[i]
+        count++
+    }
+    return if (count == 0) Double.NaN else sum / count
+}
+~~~
