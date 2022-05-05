@@ -914,15 +914,28 @@ void handleSerialInput(Channel **topChannelPtr, HciState hciState) {
 
       input[inputLen] = '\0';
 
-      if (inputLen < 3 || !isUpperCase(input[1]))
+      // verify the input conforms to the protocol
+      if (inputLen < 3) {
+        debug_println(F("DEBUG: Too short:"));
         printError(serialInput);
+      } else if (!isUpperCase(input[1])) {
+        debug_println(F("DEBUG: Invalid channel ID:"));
+        printError(serialInput);
+      }
       else {
         if (isCreateMessage(input[0]))
           handleCreateMessage(serialInput);
-        else if (isValueMessage(input[0]) && inputLen <= 5)
-          handleValueMessage(serialInput);
-        else
+        else if (isValueMessage(input[0])) {
+          if (inputLen <= 5)
+            handleValueMessage(serialInput);
+          else {
+            debug_println(F("DEBUG: Too long:"));
+            printError(serialInput);
+          }
+        } else {
+          debug_println(F("DEBUG: Invalid command ID:"));
           printError(serialInput);
+        }
       }
 
       resetSerialInput(serialInput);
@@ -936,8 +949,10 @@ void handleSerialInput(Channel **topChannelPtr, HciState hciState) {
       if (isCreateMessage(input[0]) && isUpperCase(input[1])) {
         skipLine(Serial);
         handleCreateMessage(serialInput);
-      } else
+      } else {
+        debug_println(F("DEBUG: Too long:"));
         processError(serialInput);
+      }
 
       resetSerialInput(serialInput);
 
@@ -997,6 +1012,14 @@ void handleCreateMessage(SerialInput &serialInput) {
 void handleValueMessage(SerialInput &serialInput) {
   char *input = serialInput.input;
   HciState &hciState = serialInput.hciState;
+
+  // manually check for spaces because strtol accepts them
+  for (int i = 2; i < serialInput.inputLen; i++) {
+    if (input[i] == ' ') {
+      debug_println(F("DEBUG: Not numeric (space):"));
+      return printError(serialInput);
+    }
+  }
 
   char cmdId = input[0];
   char channelId = input[1];
