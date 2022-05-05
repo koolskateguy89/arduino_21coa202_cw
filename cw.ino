@@ -1119,7 +1119,6 @@ void clearChannelRow(byte row) {
   lcd.print(F("               "));
 }
 
-// display current channels
 void updateDisplay(Channel *topChannel, HciState hciState) {
   updateBacklight();
 
