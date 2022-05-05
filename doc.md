@@ -125,7 +125,7 @@ I chose to use a LL over an array of pointers as although it makes the logic mor
 
 #### Struct `SerialInput`
 
-I encountered a problem when processing incoming messages while `SELECT` is being held: sometimes the serial receive buffer buffer wouldn't have everything entered to the Serial Monitor, e.g. I entered `VA5` but `Serial.available()` would return 2 not 4, though later calls would eventually return 4.
+I encountered a problem when processing incoming messages while `SELECT` is being held: sometimes the serial receive buffer buffer would not have everything entered to the Serial Monitor, e.g. I entered `VA5` but `Serial.available()` would return 2 not 4, though later calls would eventually return 4.
 
 This forced me to store what has been previously read from the Serial interface, which is stored in the typedef'd struct `SerialInput`:
 
@@ -181,20 +181,24 @@ Whenever an erroneous message (not conforming to the protocol) is sent, a DEBUG 
 * *200–500 words of reflection on your code.  Include those things that
   don’t work as well as you would like and how you would fix them.*
 
-I am very happy with my code. I think I thought of some ingenious solutions to some problems, such as managing the 64 most recent values and managing channels - using linkedlists is more memory friendly, at least initially, than using arrays. I believe everything works as desired.
+I am mostly happy with my code, everything works as desired.
 
-I am also happy that I was able to mostly eliminate my use of intermediate short-lived strings (e.g. substrings) by directly accessing the initial string, saving some memory on the stack. For example, when displaying the channel description for the NAMES extension (`NAMES_SCROLL::displayChannelName(int, Channel*)`), instead of storing the substring of the channel's description (for scrolling purposes) then displaying it, I directly accessed the buffer.
+Though I am kind of unhappy that I mixed C & C++ constructs and did not really try to stick to one.
 
+I am also unhappy that my implementation of RECENT is not the best - when `RECENT_MODE` is `LL`, not as many values are stored as I would have liked.
+But I only store few values to ensure the Arduino does not ever run out of SRAM, at least because of my code.
+It is possible to store more values but that does not ensure the Arduino will not ever run out of SRAM.
 
-Though I am kind of unhappy that I mixed C & C++ constructs and didn't necessarily try to stick to one.
+I am also happy that I was able to mostly eliminate my use of intermediate, short-lived strings (e.g. substrings) by directly accessing the initial string buffer, saving some memory on the stack.
+For example, when displaying the channel description for the NAMES extension (`NAMES_SCROLL::displayChannelName(int, Channel*)`), instead of storing the substring of the channel's description (for scrolling purposes) then displaying it, I directly accessed the buffer.
 
-
-I also feel like my program didn't properly reflect a proper finite-state machine. Some things could have been states, for example:
+I also feel like my program didn not properly reflect a proper finite-state machine. Some things could have been states, for example:
 
 - when an incoming message does not conform to the protocol, the program could transfer to the state `ERROR`
-- `ERROR` would essentially do what `messageError(char, ...)` does, then transfer the program back to the state `MAIN_LOOP`
+- `ERROR` would essentially do what `processError(SerialInput)` does, then the system would enter back into the `MAIN_LOOP` state
 
-But I felt that this did not make sense to be a state as the program flow for this would be more akin to a flowchart than a state machine.
+But I felt that this did not make sense as a state, because the program flow for this would be more akin to a flowchart than a state machine - the system would not _stay_ in that state.
+Furthemore, some states were not needed and could have been a transition, for example `AFTER_SYNC`.
 
 ## Extension Features {.unnumbered}
 
@@ -493,7 +497,7 @@ if (dLen < DESC_DISPLAY_LEN) {
 lcd.print(buf);
 ~~~
 
-But I chose to use my current implementation as it doesn't involve creating a temporary buffer.
+But I chose to use my current implementation as it does not involve creating a temporary buffer.
 
 ### Example
 
