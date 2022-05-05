@@ -240,11 +240,11 @@ private:
      *
      * once 64 values have been entered, each value will weigh 1/64 which I think makes sense
      *
-     * 1/46, 1/48, 1/44 are 'actual' best?
+     * 1/46, 1/48, 1/44 sometimes best, all very close
      * 1/47 is best, avrg diff of ~3.25 (2dp) - for high number of values
      *
      * mid 50s best for lower number ~100
-     * midhigh 40s best for higher number ~3_000_000 / 300
+     * midhigh 40s best for higher number >300
      */
     // the weighting for the new value
     double alpha;
