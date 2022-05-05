@@ -1049,7 +1049,7 @@ void handleValueMessage(SerialInput &serialInput) {
     debug_println(F("no longer matches current hciState"));
     *serialInput.topChannelPtr = Channel::firstChannel(hciState);
   }
-  // if channel was the first channel that matches hciState, make it the top channel
+  // if channel is the first channel that matches hciState, make it the top channel
   else if (ch->meetsHciRequirement(hciState) &&
     *serialInput.topChannelPtr == nullptr
   ) {
