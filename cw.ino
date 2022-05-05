@@ -129,10 +129,10 @@ typedef struct channel_s {
 
   void setDescription(const char *desc, byte descLen) {
     if (this->desc != nullptr)
-      free((char*) this->desc);
+      free((char*) this->desc); // free old desc as not used anymore
     this->desc = desc;
     this->descLen = descLen;
-    // SCROLL, reset scrolling
+    // SCROLL - reset scrolling
     scrollIndex = lastScrollTime = 0;
   }
 
@@ -761,8 +761,8 @@ void setup() {
   lcd.begin(16, 2);
   lcd.clear();
 
-  // uncomment to 'reset'/invalidate entire EEPROM
-  _EEPROM::_invalidateEEPROM();
+  // uncomment to invalidate/'reset' entire EEPROM
+  // _EEPROM::_invalidateEEPROM();
 }
 
 void loop() {
