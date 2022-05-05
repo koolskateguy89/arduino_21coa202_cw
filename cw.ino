@@ -64,7 +64,7 @@
 #define ARROW_POSITION   0
 #define ID_POSITION      1
 #define DATA_POSITION    2
-#define RECENT_POSITION  5
+#define AVRG_POSITION    5
 #define DESC_POSITION    10
 
 #define displayTopChannel(ch)    displayChannel(TOP_LINE, ch)
@@ -1097,7 +1097,7 @@ void displayChannel(byte row, Channel *ch) {
     lcd.print(F("   "));
 
   // RECENT
-  lcd.setCursor(RECENT_POSITION, row);
+  lcd.setCursor(AVRG_POSITION, row);
   if (ch->valueHasBeenSet()) {
     lcd.print(',');
     displayRightJustified3Digits(ch->getAverageValue());
