@@ -5,7 +5,13 @@ author: _F120840_
 date: Semester 2
 ---
 
-## FSMs
+## Table of Contents {.unnumbered}
+
+[\ref{fsms} FSMs](\ref{fsms)
+
+[Data structures](#data-structures)
+
+## FSMs {#fsms}
 
 * *Describe the finite state machine at the centre of your
   implementation.  Show the states and the transitions.  Draw
@@ -50,6 +56,8 @@ My code includes other FSMs in the extensions.
   classes or types.*
 
 Channels are implemented as an ordered singly-linked-list (ordered by channel ID) of structs (each channel is a node). The base characteristics of a channel are:
+
+Table: Channel struct
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -135,7 +143,7 @@ The following macros were defined, for use when creating and displaying the cust
 - `UP_ARROW_CHAR`   0
 - `DOWN_ARROW_CHAR` 1
 
-The only change to the FSM was that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
+The change to the FSM was that in the `INITIALISATION` state, the custom characters are defined (highlighted by italics):
 
 ![UDCHARS FSM Change](doc/udchars/fsm_change.svg)
 
@@ -147,7 +155,7 @@ In my code, this change was realised by calling `UDCHARS::createChars()` in the 
 
 ![UDCHARS FSM Code Change](doc/udchars/initialisation_createchars.png)
 
-### Defining
+### Defining the arrows
 
 The custom characters are defined in `UDCHARS::createChars()`, they were designed as 2 chevrons pointing in the appropriate direction (mirrored vertically), using [chareditor.com](https://chareditor.com):
 
@@ -160,7 +168,7 @@ The custom characters are defined in `UDCHARS::createChars()`, they were designe
 ![Down Chevron Code](doc/udchars/downChevronCode.png)
 
 
-### Displaying
+### Displaying the arrows
 
 The arrows can be displayed to the lcd using `UDCHARS::displayUpArrow(bool)` and `UDCHARS::displayDownArrow(bool)`.
 
@@ -174,11 +182,11 @@ Which are called in `updateDisplay(Channel*, HciState)`:
 
 ### Example
 
-For example, if channels `A`, `B` and `C` have been created, the Arduino should look like:
+For example, if channels A, B and C have been created, the Arduino should look like:
 
 ![UDCHARS Example Arduino Display](doc/udchars/udchars_arduino.jpg)
 
-As there are no channels before ("above") `A`, the up arrow is not displayed, a space is displayed instead. As there is a channel after ("below") `B`, the down arrow is displayed.
+As there are no channels before ("above") A, the up arrow is not displayed, a space is displayed instead. As there is a channel after ("below") B, the down arrow is displayed.
 
 ## FREERAM
 
@@ -190,7 +198,17 @@ This can displayed to the screen, left justified, using `FREERAM::displayFreeMem
 
 ![`FREERAM::displayFreeMemory(byte)`](doc/freeram/display.png)
 
-This is called by `selectDisplay()`; once SELECT has been held for at least 1 second. The Arduino should look like:
+The change to the FSM was that in the `SELECT_AWAITING_RELEASE` state, the Arduino will also display the amount of available SRAM:
+
+![FREERAM FSM Change](doc/freeram/fsm_change.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/DSr1IiKm483XVKunDyZUrGjQfA0kNX-uAPHfCwq3oIHa9aflRq5SVl_clwbXivwJ--98GBdQ2P5qQroDYpWt3M_3ysC9ds5yZ1-lo_roc8OdYAmruGbgFP8OZ2-pUFzVCPSk1cK7_4PEk2Q2wHxUlP-bjhAHAh1i9RCSa2_XGJhB3xB1NXhyRS4Ah0ID4g5IT3UIs7Fw1G00
+-->
+
+In my code, this was realised by calling `FREERAM::displayFreeMemory` in `selectDisplay()`.
+
+Once SELECT has been held for at least 1 second. The Arduino should look like:
 
 ![FREERAM Arduino Display](doc/freeram/freeram_arduino.jpg)
 
@@ -219,12 +237,11 @@ This base of the HCI FSM is realised by the enum `HciState` and the function `Ch
 
 ## EEPROM
 
-*In documentation, indicate how lay out use of EEPROM, which LoC and functions I use to store information*
+The namespace `_EEPROM` contains the code relating to the EEPROM extension.
 
-The namespace `_EEPROM` contains the code relating to the FREERAM extension.
+Each channel occupies 26 continguous bytes in the EEPROM:
 
-
-Each channel occupies 26 bytes in the EEPROM:
+Table: EEPROM Channels \label{eeprom-channels}
 
 | # of Bytes | Description |
 | ----- | --- |
@@ -235,18 +252,54 @@ Each channel occupies 26 bytes in the EEPROM:
 | 15 | Description |
 | 7 | My student ID |
 
-The beginning address for a channel is calculated using `(id - 'A') * 26`. This creates a distance of 26 bytes between the beginning addresses of each channel (A: 0, B: 26, C: 52, etc.).
+The beginning address for a channel is calculated using `(id - 'A') * 26`, creating a distance of 26 bytes between the beginning addresses of each channel (A: 0, B: 26, C: 52, ...).
+
+I stored my student ID in order to be able to check that the values in the EEPROM were written by me, see \S\ref{pers-val}.
+
+### Writing to EEPROM
+
+Modifications to the EEPROM are only done using 'update' functions and not 'write' function to prolong the life of the EEPROM.
+
+Each characteristic of a channel that needs to be written to the EEPROM (see table \ref{eeprom-channels}) has a specific offset from the beginning address of the channel. These are defined by the following macros (`idAddr` is the beginning address - the offset for the ID is 0):
+
+- `maxOffset(idAddr)       (idAddr + 1)`
+- `minOffset(idAddr)       (idAddr + 2)`
+- `descOffset(idAddr)      (idAddr + 3)`
+- `studentIdOffset(idAddr) (idAddr + 19)`
+
+Every time a channel's description, value, maximum or mimimum is updated, the EEPROM is updated using `_EEPROM::updateEEPROM(Channel*)`.
+This ensures the EEPROM is kept up to date.
+
+### Reading from EEPROM
+
+The change to the FSM was that in the `AFTER_SYNC` state, the stored channels will be read from the EEPROM:
+
+![EEPROM FSM Change](doc/eeprom/fsm_change.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/3SrD2i8m40RGVKunDyZULKNgpXzQDq91GlEL3YIJCZEAtjuUuF4wywJ-hYMid46ec_yemsRbpRb92CVpenzUu_DwEf11CXKsfxOGrwsWGXnv4dmTOZimQXyeZL1EPP8O5IdJl2OH5AD5MwM-lm-tIuoXW-Jz_WC0
+-->
+
+In my code, this was realised by calling `_EEPROM::readEEPROM()`:
+
+![EEPROM FSM Code Change](doc/eeprom/after_sync_read.png)
+
+The function `_EEPROM::<unnamed>::readChannel(char)` returns a pointer to the channel with the provided ID, with its values initialised by values read from the EEPROM.
+`_EEPROM::readEEPROM()` is used to read all the channels from the EEPROM. This is done by iterating from A through to Z, getting the channel using `readChannel(char)`, and forming a linked list of channels, then returning the head of this linked list:
+
+![`_EEPROM::readEEPROM()`](doc/eeprom/readeeprom.png)
+
+### Persistence Validation {#pers-val}
 
 The mechanism to determine whether the values were written by me is a 3 step process:
+
 1. Check that the written student ID is equals to my student ID
 2. Check that the written ID matches the ID of the channel that should be written in that address
 3. Check that the written description length is between 1 and 15 inclusive
 
-Thus it is simple to 'invalidate' any written channel: by modifying the values written such that they fail any step in the above process, for example setting the written ID to '@'.
+Therefore, it is simple to 'invalidate' any written channel: by modifying the values written such that they fail any step in the above process. For example setting the written ID to '@', similar to what is done by `_EEPROM::invalidateChannel(char)` and `_EEPROM::invalidateEEPROM()`.
 
-I use the namespace `_EEPROM` for all functions relating to using the EEPROM, mainly `_EEPROM::updateEEPROM(Channel*)` and `_EEPROM::readEEPROM()`.
-
-As channels are implemented as a linked-list, `_EEPROM::readEEPROM()` returns the head of a linked-list of EEPROM-read channels.
+Although writing my student ID with every channel feels a bit excessive, I think it is the best mechanism to be able to verify that the values were written by **me** without being complicated.
 
 ## RECENT
 
@@ -262,7 +315,7 @@ As RECENT seems to be impossible without making any compromise, it is implemente
 
 You can choose which one the program uses by changing the macro `RECENT_MODE`, it should only be defined as one of the following defined macros:
 
-- `LL` (linked-list as queue)
+- `LL` (linked list as queue)
 - `ARRAY` (circular array)
 - `EMA` (exponential moving average)
 
@@ -279,9 +332,9 @@ I use a queue (implemented with a singly-linked-list), with a maximum size defin
 
 `Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
 
-While using a linked-list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
+While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
 
-But using a linked-list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
+But using a linked list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -310,11 +363,11 @@ The EMA implementation is based upon this formula:
 
 *TODO: dont try and explain how it works, but explain the problem with when <64 values have been entered (use wikipedia page?), and how i solved it by essentially using a total average*
 
-![EMA equation](doc/ema.svg)
+$$y[n] = \alpha x[n] + (1 - \alpha)y[n - 1]$$
 
-<!--
-https://render.githubusercontent.com/render/math?math=y[n]%20=%20\alpha%20x[n]%20%2b%20(1-\alpha)%20y[n-1]
--->
+\begin{equation}
+  y[n] = \alpha x[n] + (1 - \alpha)y[n - 1]
+\end{equation}
 
 
 In my implementation of an EMA, the average of the first 64 values is pretty much exaxtrasasdsadasda
@@ -334,9 +387,12 @@ It makes sense to do as you won't be able to store the 64 most recent values any
 
 *In documentation, indicate data structure used to store the channel name and how it is printed to the display*
 
-indicate data structure used to store the channel name and how it is printed to the display
+A channel's description/name is stored as a `const char*`.It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the description previously displayed:
 
-A channel's description/name is stored in a `const char*`.It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the description previously displayed.
+![Displaying the channel description](doc/names_scroll/displayNames.png)
+
+For example, after a `CAMain` message, the Arduino should look like:
+
 
 ## SCROLL
 
