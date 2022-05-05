@@ -193,14 +193,6 @@ Furthemore, some states were not needed and could have been a transition, for ex
 
 ## Extension Features {.unnumbered}
 
-* *For each extension feature you have implemented describe the
-  additional code and changes to your FSM .  Give examples of types,
-  variables and code that is important.*
-
-* *do not write anything here--put it in the subsections following.*
-
-* ***Delete the text from Extension Features to here***
-
 ## UDCHARS
 
 The namespace `UDCHARS` contains the code relating to the UDCHARS extension.
@@ -281,8 +273,6 @@ Once SELECT has been held for at least 1 second. The Arduino should look like:
 
 ## HCI {#HCI}
 
-*In documentation, show LoC and thinking behind mechanism to display subsets of list of channels*
-
 HCI is implemented using a finite state machine with the states:
 
 - NORMAL
@@ -298,8 +288,17 @@ HCI is implemented using a finite state machine with the states:
 http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00
 -->
 
-This base of the HCI FSM is realised by the enum `HciState` and the function `Channel#meetsHciRequirement(HciState)`.
+The HCI FSM is realised by the enum `HciState` and the function `Channel#meetsHciRequirement(HciState)`.
 
+The function `Channel#meetsHciRequirement(HciState)` returns whether or not a channel is meant to be displayed according to the current state of the HCI FSM.
+
+For example, channel A with {data: 30, min: 50, max: 255}, the display should look like:
+
+![HCI Arduino Display](doc/hci/before.jpg)
+
+After `LEFT` has been pressed, the display should look like:
+
+![`LEFT` pressed](doc/hci/after.jpg)
 
 ## EEPROM
 
@@ -423,6 +422,8 @@ As using a queue or circular array make the same compromise, it makes sense to c
 While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), its memory usage will increase very quickly. Assuming `MAX_RECENT_SIZE` = 64, once 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
 
 As the array uses less memory, it allows for an array of a larger size than the maximum size of the linked list, which _should_ give a more accurate average of the last 64 values.
+
+Their memory usages can be seen below (assuming all 64 values are stored):
 
 ![Memory Usage Comparison](doc/recent/memory_comp.png)
 

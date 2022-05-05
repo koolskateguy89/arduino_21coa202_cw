@@ -58,17 +58,14 @@ msgs = [
     b'XB50',
     b'NB25',
 ]
-# msgs = map(lambda x: bytes(x, 'ascii'), msgs)
 
 # Simply write these messages out once per second
 # Customise above and below as you see fit.
 
 for x in msgs:
-    print('Write:', str(x))
-    ser.write(x + b'\n')
+    print("Write:", str(x))
+    ser.write(x+b'\n')
 
     # Check for message back.  This will timeout after a second
     line = ser.readline()
     print("Read: ", line)
-
-    # time.sleep(1)

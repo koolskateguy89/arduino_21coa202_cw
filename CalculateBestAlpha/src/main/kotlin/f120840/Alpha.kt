@@ -2,17 +2,16 @@ package f120840
 
 import kotlin.math.absoluteValue
 
+// to see difference when using total average
 const val TOTAL_AVERAGE = 0
 
 fun main(vararg args: String) {
     val results = mutableMapOf<Int, MutableList<Double>>()
 
     repeat(1_000) {
-        println(it)
         val a = Alpha(300)
         a()
         a.avrgDiffResults.forEach { (alpha, diff) ->
-            // println("1 / $alpha  =   $diff")
             results.computeIfAbsent(alpha) { mutableListOf() }
                 .add(diff)
         }
@@ -62,12 +61,8 @@ class Alpha(val nRecents: Int) {
         alphasAvrgs[TOTAL_AVERAGE] = values.sum().toDouble()
 
         for (i in 65..nRecents) {
-            println("\t$i")
-            // println(values.takeLast(64))
             val added = randomByte.also { values.add(it) }
-            // val exact = values.takeLast(64).average()
             val exact = values.averageLast(64)
-            // println("exact = $exact")
 
             alphas.forEach {
                 val diff: Double

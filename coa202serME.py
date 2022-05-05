@@ -47,6 +47,8 @@ print(line)  # This should print BASIC or your extension list
 
 initial = ser.readlines()
 print('Init: ', initial)
+for line in initial:
+    print()
 
 # Build a list of messages to send
 # the b'' notation creates byte arrays suitable for
@@ -63,21 +65,53 @@ msgs = [
 ]
 
 for id in [chr(x) for x in range(ord('A'), ord('Z')+1)]:
-  # msgs.append(f'C{id}{id}{id}')
-  msgs.append(f'C{id}123456789012345')
-  msgs.append(f'V{id}' + str(randint(0, 255)))
+    # msgs.append(f'C{id}{id}{id}')
+    msgs.append(f'C{id}123456789012345')
+    for i in range(0, 10):
+        # msgs.append(f'V{id}5')
+        ...
+    # msgs.append(f'V{id}' + str(randint(0, 255)))
+
+def sendMsgs(delay: float = 0.1):
+    for x in msgs:
+        print('Write:', str(x))
+        ser.write(x + b'\n')
+
+        # Check for message back. This will timeout after a second
+        line = ser.readline()
+        print('Read: ', line)
+
+        # time.sleep(1)
+        time.sleep(delay)
 
 msgs = map(lambda x: bytes(x, 'ascii'), msgs)
+
+sendMsgs()
 
 # Simply write these messages out once per second
 # Customise above and below as you see fit.
 
-for x in msgs:
-    print('Write:', str(x))
-    ser.write(x + b'\n')
+input('press enter to send Vs')
+msgs = []
+for id in [chr(x) for x in range(ord('A'), ord('Z')+1)]:
+    # msgs.append(f'V{id}' + str(randint(0, 255)))
+    # msgs.append(f'V{id}1')
+    ...
 
-    # Check for message back.  This will timeout after a second
+# msgs = map(lambda x: bytes(x, 'ascii'), msgs)
+
+for x in msgs:
+    if (x[1] == 'Y' or x[1] == 'Z'):
+        input(f'press enter to send {x}')
+
+    x += '\n'
+    x = bytes(x, 'ascii')
+
+    print('Write:', str(x))
+    ser.write(x)
+
+    # Check for message back. This will timeout after a second
     line = ser.readline()
     print('Read: ', line)
 
-    # time.sleep(1)
+    time.sleep(0.3)
