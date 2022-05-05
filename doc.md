@@ -13,82 +13,158 @@ date: Semester 2
 
 ## FSMs {#fsms}
 
-* *Describe the finite state machine at the centre of your
-  implementation.  Show the states and the transitions.  Draw
-  the states and transitions as a picture and include it here.*
+![Main FSM\label{main-fsm}](doc/main_fsm.svg)
+
+<!--
+http://www.plantuml.com/plantuml/uml/XPBFZfim4CRlVegvHQesQdlbK2sxeGrI2ZGGfLMf8e8dYLKpHhRPTj--9Y4i4Acv83oUR_xu-pqQMsZRL9AT14V0ghQlmD6KMjHMA68iZC8iz5TXwcTX77bWq89LzVEf84Bv0DsFvvsmuDt19G0rKjPMvvIpLc9GOcaJZSPaei87gDjVv4-DjOfQmGUM_eYUb-iu6lNQ5-LlAOwdjYiactMo2d8oI1nctsQWNb13YbeKCYTGL2BKBcAmLCIP_paBrhksh0TdYHJ6WZg0g6g95P95xcJuro8PjwqPrxjflrs6MS2--c6qMyLnuW4NffR5AvINlKrEjLOb6WE2IbK9EaBbJiKHtTMVGbWuA0txyywN5s1fi0gUizqoM2qyw5CkqRRd7k64iXspZNyquBuQ9HO6-LNiRtrdKlHbjtPdFmtU1ZEsuKWMmiNTqMxxzcsUDbaMHxja7QHfC1pJMAMHTmjDLFzfoDZFTxzW_Wd6S4rOWxdBc30nPgJB6Tey-pu3ZIMA5-HmqAhgt1omSDRq9h8tFyyNGp-wmvLLo6a-d-TqMRkFMiVpfCZqmJR9-qMyZGQ5nYMw1-pgjpGTyUeXyXulDgHbEEqKW7xo5fqEd1jjFtAVVO-hUx89ADFqCIszwX69DvNy1m00
+-->
+
+#### INITIALISATION {.unnumbered}
 
 Write a description of your states, what is being waited for, and the actions take during transition between states.
 
-- INITIALISATION
-  - setup
-- SYNCHRONISATION
-  - synchronising through Serial
-- AFTER_SYNC
-  - intermediate step after sync and b4 main
-- MAIN_LOOP
-  - main loop
-- SELECT_HELD
-  - waiting until select has been held for 1s
-- SELECT_AWAITING_RELEASE
-  - waiting for select button to be released
-- BUTTON_PRESSED
-  - waiting for stored button to be released
+This state carries out the actions involved in initialising and setting up the system. Once complete, the system enters the `SYNCHRONISATION` state.
 
-![Main FSM](doc/main_fsm.svg)
+#### SYNCHRONISATION {.unnumbered}
 
-<!--
-http://www.plantuml.com/plantuml/uml/XLB1Zfim4BtxA-OMgTgexPL3jUo6Tf5II0EhRLKgnE99OiaU8zjiktzVM09nVMWk4UEyDpDlthkrhZ6kLvAT14T0rRbNu6XR8pedD36MPccPnjkqYCiqpoAmwC3fxlxK4A6yWVD759smuUTY003rKdREL5InaM9HOkjs1gqjXS8RwCPFv7UzSvf6mWTM_CZk7_PvviqY3gjlAz0lQA108nfPaQOMeKC35bjDdCMVosHVZ-GpGmhhG1z0g4wYGdB8Ay8_3iaEagpVZNsDqwpUvlak0Yvi9vjNQ2SHjgBEw1Qj1K6jLeAEe8QgEUBmr-z6E3Xe0yzl0YOvh4YsoNrPFoJRJGGBP7eTDJuZd50EsupF7oqClmObDXRvp8sVuk7WsPTwFzHnaLpsigxdI0xIpVNDmh6NCNUFPPbdzMwV54NYRscTDiZFUWBMVmOozlFTBrX_Wd-34kG6rWCYyDVtUy7uPgw-hy1WY-85EHoCLhDf5z0RP_6GNUoS1lfsJCMSEwXelLvNDCbUNfrG63G93_QuUx_9dpAlaTTYEU3SVmpJ4MSFaI_fOdvO_6t302oRZyc1AJW1rpl1WhwMgskq82W1F4ZBmhf5uhsIVm40
--->
+This state carries out the 'synchronisation phase' defined in the specification. The system will stay in this state until synchronisation with the host is complete, thence the system will enter the `AFTER_SYNC` state.
+
+#### AFTER_SYNC {.unnumbered}
+
+This state carries out the actions after the synchronisation phase, as defined by the specification. Once complete, the system enters the `MAIN_LOOP` state.
+
+#### MAIN_LOOP {.unnumbered}
+
+This state carries out the main phase. In this state, the system waits for messages from the host and button presses, and displays information about channels.
+
+When `SELECT` is pressed, the system enters the `SELECT_HELD` state.
+
+When `UP` is pressed, the system enters the `BUTTON_PRESSED` state.
+Once it is released, the program will display the channel before the channel currently displayed on the top line.
+
+When `DOWN` is pressed, the system enters the `BUTTON_PRESSED` state.
+Once it is released, the program will display the channel after the channel currently displayed on the bottom line.
+
+#### SELECT_HELD {.unnumbered}
+
+This state waits for `SELECT` to be held for 1 second. Once that happens, the LCD backlight turns purple, my student ID is displayed, and the system enters the `SELECT_AWAITING_RELEASE` state. If `SELECT` is released before 1 second, the system enters back into the `MAIN_LOOP` state.
+
+#### SELECT_AWAITING_RELEASE {.unnumbered}
+
+In this state, the system waits for `SELECT` to be released. Once it has been released, the LCD is cleared and the system enters back into the `MAIN_LOOP` state.
+
+#### BUTTON_PRESSED {.unnumbered}
+
+In this state, the system waits for the stored button (`UP`/`DOWN`) to be released, implementing a proper button press.
+This is 'blocking', if multiple buttons are pressed, only the actions for the first one are carried out.
+
+Once the button is released, the system enters back into the `MAIN_LOOP` state.
 
 * *If there are other (sub) FSMs in your code then indicate those here.*
 
 My code includes other FSMs in the extensions.
 
-
-
 **TODO: FSM after all extensions*
 
 ## Data structures
 
-* *Describe the data structures you are using to implement the
-  Coursework.  These could be types (structures, enums), classes and
-  constants.  Also describe the variables that are instances of these
-  classes or types.*
+### Types
 
-Channels are implemented as an ordered singly-linked-list (ordered by channel ID) of structs (each channel is a node). The base characteristics of a channel are:
+#### Enum `State`
 
-Table: Channel struct
+The states in the main FSM (see figure \ref{main-fsm}) are defined in the typedef'd enum `State`. This current state is statically stored in `loop()#state`.
+
+An enum was used as it allowed me to define named constants and use them with some type safety, through using an `enum class` would have provided more type safety.
+
+#### Struct `Channel`
+
+Channels are implemented as an ordered singly-linked-list, ordered by channel ID.
+This is implemented using the typedef'd struct `Channel`:
+
+Table: `Channel` struct
 
 | Type | Name | Description |
 | --- | --- | --- |
-| char | id | This channel's ID (A-Z) |
+| char | id | This channel's ID (A-Z)|
 | const char* | desc | This channel's description/name/title (max. 15 chars) |
 | byte | descLen | The length of this channel's description |
 | byte | max | This channel's maximum |
 | byte | min | This channel's minimum |
 | channel_s* | next | Pointer to the next created channel (by ID) |
-| byte | scrollIndex | SCROLL: the start index of the currently displayed description |
+| byte | scrollIndex | SCROLL: the start index of the currently displayed description (see \S\ref{SCROLL}) |
 | unsigned long | lastScrollTime | SCROLL: the time the description was last scrolled |
 | ScrollState | scrollState | SCROLL: the current state of scrolling this channel's description |
 
-The rest is determined by the set [RECENT_MODE](#recent).
+NOTE: This struct has more attritbutes, which are determined by the macro `RECENT_MODE`, see \S\ref{RECENT}.
 
-The head of this linked list is stored statically in `Channel::headChannel`. When a new channel is created using `Channel::create`, the linked list is updated using `Channel::insertChannel`, which will insert the new channel into the appropriate position, according to the channel's ID.
+The instances of `Channel` are:
 
-* *When you have functions to update the global data structures/store,
-  list these with a sentence description of what each one does.*
+- `Channel::headChannel`
+- `loop()#topChannel`
+  - the channel currently displayed on the top line
 
-| Function | Description |
+The head of the channel linked list (LL) is stored statically in `Channel::headChannel`. When a new channel is created using `Channel::create(char, char*, byte)`, the LL is updated using `Channel::insertChannel(Channel*)`, which will insert the new channel into the appropriate position, according to the channel's ID.
+
+Table: Static `Channel` functions
+
+| Function Signature | Description |
 | --- | --- |
-| `Channel::create(char id, const char* desc, byte descLen)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
-| `Channel::insertChannel(Channel* ch)` | Inserts the given channel into the linked list of channels in its appropriate position |
+| `insertChannel(Channel* ch)` | Inserts the given channel into the LL of channels in its appropriate position |
+| `create(char id, const char* desc, byte descLen)` | Creates a new channel with the provided ID and description if not already created, else updates description of channel |
+| `channelForId(char)` | Returns the channel with the provided ID, or `nullptr` if not yet created |
+| `firstChannel(HciState)` | HCI: Returns the first channel in the LL that matches the current HCI state (see \S\ref{HCI}) |
+| `channelBefore(Channel*, HciState)` | Returns the channel before the provided channel in the LL, that matches the current HCI state |
+| `channelAfter(Channel*, HciState)` | Returns the channel after the provided channel in the LL, that matches the current HCI state |
+| `canGoUp(Channel*, HciState)` | Returns whether there exists a channel before the provided channel in the LL, that matches the current HCI state |
+| `canGoDown(Channel*, HciState)` | Returns whether there exists a channel after the provided channel in the LL, that matches the current HCI state |
 
+When `UP` is pressed, `Channel#canGoUp` is called to check that there exists a channel before the one currently displayed on top, and if there is then `Channel#channelBefore` is called to get it and `loop()#topChannel` is updated.
+When `DOWN` is pressed, the same process occurs but using `Channel#canGoDown` and `Channel#channelAfter`.
 
+I chose to use a LL over an array of pointers as although it makes the logic more complicated, I felt it was a cleaner solution and it made getting the channel before\after a channel easier if there uncreated channels.
 
+#### Struct `SerialInput`
 
+I encountered a problem when processing incoming messages while `SELECT` is being held: sometimes the serial receive buffer buffer wouldn't have everything entered to the Serial Monitor, e.g. I entered `VA5` but `Serial.available()` would return 2 not 4, though later calls would eventually return 4.
 
+This forced me to store what has been previously read from the Serial interface, which is stored in the typedef'd struct `SerialInput`:
 
-When processing incoming messages while select is being held, I encountered a problem where sometimes the Serial wouldn't have all things entered ready, e.g. I entered `VA5` but `Serial.available()` would return `2`
+Table: `SerialInput` struct
+
+| Type | Name | Description |
+| --- | --- | --- |
+| static constexpr byte | INPUT_LEN | The maximum number of bytes to read from the Serial interface |
+| char[ ] | input | What has been read so far |
+| byte | inputLen | The number of characters read so far |
+| Channel** | topChannelPtr | Pointer to the pointer that stores the channel displayed on the top line |
+| HciState | hciState | HCI: The current state of the HCI FSM (see \S\ref{HCI}) |
+
+Using a struct also made it easier to pass around information - instead of a function having multiple parameters representing each aspect of `SerialInput`, it would just take in a `SerialInput`.
+
+The function `handleSerialInput(Channel**, hciState)` statically stores the only instance of `SerialInput` and is responsible for handling any messages received from the host.
+When a message has been completely received, if it conforms to the protocol then `handleCreateMessage(SerialInput&)` (first char C) or `handleValueMessage(SerialInput&)` (first char V, X or N) will be called and carry out the actions specified by the documentation.
+
+### Constants (Macros)
+
+I stored my student ID and my list of implemented extensions in the macros `STUDENT_ID` and `IMPLEMENTED_EXTENSIONS`.
+
+#### LCD Backlight
+
+To help with changing the colour of the LCD backlight, I used macros to define every color:
+
+![Backlight Colour Macros](doc/data_structures/backlight_defines.png)
+
+#### LCD
+
+I used macros defining the column of where each characteristic of a channel will be displayed:
+
+![LCD Macros](doc/data_structures/lcd_defines.png)
+
+#### Timeouts
+
+To held with the length of timeouts, I used macros:
+
+![Timeout Macros](doc/data_structures/timeout_defines.png)
 
 ## Debugging
 
@@ -212,7 +288,7 @@ Once SELECT has been held for at least 1 second. The Arduino should look like:
 
 ![FREERAM Arduino Display](doc/freeram/freeram_arduino.jpg)
 
-## HCI
+## HCI {#HCI}
 
 *In documentation, show LoC and thinking behind mechanism to display subsets of list of channels*
 
@@ -232,7 +308,6 @@ http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ
 -->
 
 This base of the HCI FSM is realised by the enum `HciState` and the function `Channel#meetsHciRequirement(HciState)`.
-
 
 
 ## EEPROM
@@ -277,7 +352,7 @@ The change to the FSM was that in the `AFTER_SYNC` state, the stored channels wi
 ![EEPROM FSM Change](doc/eeprom/fsm_change.svg)
 
 <!--
-http://www.plantuml.com/plantuml/uml/3SrD2i8m40RGVKunDyZULKNgpXzQDq91GlEL3YIJCZEAtjuUuF4wywJ-hYMid46ec_yemsRbpRb92CVpenzUu_DwEf11CXKsfxOGrwsWGXnv4dmTOZimQXyeZL1EPP8O5IdJl2OH5AD5MwM-lm-tIuoXW-Jz_WC0
+http://www.plantuml.com/plantuml/uml/3SvFgi8m40VWVKunDyZ-hVgGY2xyGriGeI2n-TK6aqd9ZAAtjmVuu6j4VTLNJcQE0OIyw9S2PAnnqLZOcFzjxzfRTprk_aZ0WL8KfJ9Hp4j21Yl2m8IFWcKLGkMDIXrgz6bWWTBTZyyK7xEI5hhizhqRsDeA7sYSFJEIq5HB9kVExUbWhMd0OKtz0000
 -->
 
 In my code, this was realised by calling `_EEPROM::readEEPROM()`:
@@ -303,7 +378,7 @@ Please see lines 764 - 765 in the code.
 
 Although writing my student ID with every channel feels a bit excessive, I think it is the best mechanism to be able to verify that the values were written by **me** without being complicated.
 
-## RECENT
+## RECENT {#RECENT}
 
 *In documentation, indicate the names and locations of the data structures used to store the recent values*
 
@@ -398,22 +473,21 @@ It makes sense to do as you won't be able to store the 64 most recent values any
 
 ## NAMES
 
-*Write about this extension*
+SCROLL and NAMES were implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
-*In documentation, indicate data structure used to store the channel name and how it is printed to the display*
+Initially, I stored the channel's description as a `String`, but in the end I chose to use a `const char*` as this allows me to allocate only the exact amount of memory needed to store the description.
 
-A channel's description/name is stored as a `const char*`.
-It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the previously displayed description:
+The channel description is printed to the display using `lcd.print` with padded spaces on the end to overwrite the previously displayed description:
 
 ![Displaying the channel description](doc/names/displayNames.png)
 
-At first, I copied the description to a separate buffer, then if the channel description was not long enough, spaces would be padded to the end of that buffer (to overwrite the previously displayed description), then that buffer would be printed to the LCD. Which can be seen below:
+At first, I copied the description to a separate buffer,
+with padded spaces to the end (to overwrite the previously displayed description) if the channel description was not long enough to take up all the space it should on the display, then that buffer would be printed to the LCD. Which can be seen below:
 
-~~~ {.cpp .numberLines startFrom="741" caption="Displaying channel description using temporary buffer"}
+~~~ {.cpp .numberLines startFrom="741"}
 char buf[DESC_DISPLAY_LEN + 1];
+strncpy(buf, ch->desc + si, min(DESC_DISPLAY_LEN, dLen - si));
 buf[DESC_DISPLAY_LEN] = '\0';
-
-strncpy(buf, ch->desc, min(DESC_DISPLAY_LEN, dLen));
 
 // pad spaces
 if (dLen < DESC_DISPLAY_LEN) {
@@ -423,17 +497,21 @@ if (dLen < DESC_DISPLAY_LEN) {
 lcd.print(buf);
 ~~~
 
+But I chose to use my current implementation as it doesn't involve creating a temporary buffer.
+
+### Example
+
 For example, after a `CAMain` message, the Arduino should look like:
 
 ![NAMES Arduino Display](doc/names/names_arduino.jpg)
 
-## SCROLL
+## SCROLL {#SCROLL}
 
 *Write about this extension*
 
 *In documentation, highlight parts of FSM required for this particular requirement and the LoC and functions that carry this implementation*
 
-SCROLL and NAMES are implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
+SCROLL and NAMES were implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
 It is implemented using a flowchart:
 ![SCROLL Flowchart](doc/scroll_flowchart.svg)
@@ -442,7 +520,12 @@ It is implemented using a flowchart:
 http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000
 -->
 
-It essentially displays a substring of the channel description
+This essentially displays a moving substring of the channel description.
+
+
+### Example
+
+For example, the message `CA0123456789` is sent.
 
 ~~~bash
 pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --shift-heading-level-by=-1
@@ -450,7 +533,7 @@ pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --sh
 pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
 
 
-pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --listing && clear
+pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1  && clear
 
 
 
