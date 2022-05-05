@@ -170,9 +170,9 @@ The custom characters are defined in `UDCHARS::createChars()`, they were designe
 
 ### Displaying the arrows
 
-The arrows can be displayed to the lcd using `UDCHARS::displayUpArrow(bool)` and `UDCHARS::displayDownArrow(bool)`.
+The arrows can be displayed to the LCD using `UDCHARS::displayUpArrow(bool)` and `UDCHARS::displayDownArrow(bool)`.
 
-These functions have a single parameter `bool display`, which determines whether the arrows is printed to the lcd or a space is printed instead. This is indicative of whether a channel exists above the current `topChannel` or a channel exists below the current `btmChannel`.
+These functions have a single parameter `bool display`, which determines whether the arrows is printed to the LCD or a space is printed instead. This is indicative of whether a channel exists above the current `topChannel` or a channel exists below the current `btmChannel`.
 
 ![Code to Display Arrows](doc/udchars/displayArrows.png)
 
@@ -321,22 +321,15 @@ You can choose which one the program uses by changing the macro `RECENT_MODE`, i
 - `ARRAY` (circular array)
 - `EMA` (exponential moving average)
 
-If it is defined as any other value, the program will not compile.
-
-Using a queue and circular array are similar because they store the most recent values
-
-
-![Memory comp](doc/recent/memory_comp1.png)
+If `RECENT_MODE` is defined as any other value, the program will not compile, it is effectively an enum.
 
 ### Queue (Linked List)
 
+The compromise made by this implementation is...
+
 I use a queue (implemented with a singly-linked-list), with a maximum size defined by the macro `MAX_RECENT_SIZE`, which once exceeded will discard the head value to manage the most recent values for a channel.
 
-`Channel::recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
-
-While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
-
-But using a linked list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
+`Channel#recentHead` stores the head of this linkedlist, and can be used for all list-related operations.
 
 | Type | Name | Description |
 | --- | --- | --- |
@@ -346,18 +339,37 @@ But using a linked list should be more memory-efficient, at least for a small nu
 
 ### Circular Array
 
-I use a circular byte array, keeping track of:
-- the index of the oldest value
-- the number of values that have been entered
+The compromise made by this implementation is...
 
-Although using a a circular array would initially use less memory than a linked list, in the long run the array would use less memory, thus allowing an array of a larger size than the maximum size of the linked list, giving a more accurate average of the last 64 values.
+I use a circular byte array of size `RECENT_ARRAY_SIZE`, overwriting the oldest value once a new value has been entered (after more than `RECENT_ARRAY_SIZE` values have been entered).
 
 | Type | Name | Description |
 | --- | --- | --- |
 | byte* | recents | The array |
 | unsigned long | nRecents | The number of values entered |
 
+### Queue vs Circular Array
+
+As using a queue or circular array both store the entered values, a direct comparison between them makes sense to do. **TODO reword**
+
+While using a linked list will start off using less memory than an aray, because each node will use 5 bytes (1 for the value and 4 for the pointer of the next node), the memory usage
+
+
+
+But using a linked list should be more memory-efficient, at least for a small number of entered values. However, the memory taken by the linked list increases by 5 bytes for each new value entered; so when (assuming `MAX_RECENT_SIZE` = 64) 64 values have been entered, the linked list will take 320 bytes which is a lot more than the 64 bytes an array will take.
+
+
+Although using a a circular array would initially use less memory than a linked list, in the long run the array would use less memory, thus allowing an array of a larger size than the maximum size of the linked list, giving a more accurate average of the last 64 values.
+
+
+Memory comp assumes storing 64 values
+
+![Memory Usage Comparison](doc/recent/memory_comp.png)
+
 ### Exponential Moving Average
+
+The compromise made by this implementation is that the most recent values are not actually stored, and it is an estimation (but the other implementations also technically are).
+However, this 'should' (**todo: maybe test?**) give a closer estimate to the average of the most recent 64 values than the other two implementations as this taken the last 64 values into account, whereas the others will take into account their max size. **todo reword max size I think**
 
 I had to make a choice between using the average of all values entered and using an exponential moving average (EMA). I decided to implement an EMA as it is more accurate for the average of the last 64 values. More specifically, as the numbers of values entered increases, the more accurate an EMA is over a total average.
 
@@ -374,6 +386,7 @@ $$y[n] = \alpha x[n] + (1 - \alpha)y[n - 1]$$
 
 In my implementation of an EMA, the average of the first 64 values is pretty much exaxtrasasdsadasda
 
+**TODO: best alpha line graph**
 
 It makes sense to do as you won't be able to store the 64 most recent values anyway, and thus calculating the average of the e.g. 32 most recent values will be as estimate for the average of the 64. So a compromise has to be made of estimating
 
@@ -389,12 +402,30 @@ It makes sense to do as you won't be able to store the 64 most recent values any
 
 *In documentation, indicate data structure used to store the channel name and how it is printed to the display*
 
-A channel's description/name is stored as a `const char*`.It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the description previously displayed:
+A channel's description/name is stored as a `const char*`.
+It is printed to the display using `lcd.print` with padded spaces on the end to overwrite the previously displayed description:
 
-![Displaying the channel description](doc/names_scroll/displayNames.png)
+![Displaying the channel description](doc/names/displayNames.png)
+
+At first, I copied the description to a separate buffer, then if the channel description was not long enough, spaces would be padded to the end of that buffer (to overwrite the previously displayed description), then that buffer would be printed to the LCD. Which can be seen below:
+
+~~~ {.cpp .numberLines startFrom="741" caption="Displaying channel description using temporary buffer"}
+char buf[DESC_DISPLAY_LEN + 1];
+buf[DESC_DISPLAY_LEN] = '\0';
+
+strncpy(buf, ch->desc, min(DESC_DISPLAY_LEN, dLen));
+
+// pad spaces
+if (dLen < DESC_DISPLAY_LEN) {
+  memset(buf + dLen, ' ', DESC_DISPLAY_LEN - dLen);
+}
+
+lcd.print(buf);
+~~~
 
 For example, after a `CAMain` message, the Arduino should look like:
 
+![NAMES Arduino Display](doc/names/names_arduino.jpg)
 
 ## SCROLL
 
@@ -407,20 +438,26 @@ SCROLL and NAMES are implemented together as they go hand-in-hand, in the namesp
 It is implemented using a flowchart:
 ![SCROLL Flowchart](doc/scroll_flowchart.svg)
 
-![SCROLL FSM](doc/scroll_fsm.svg)
-
 <!--
 http://www.plantuml.com/plantuml/uml/SoWkIImgAStDuSh8J4bLICqjAAbKI4ajJYxAB2Z9pC_ZuWfs3lBtyOaF3d4C2h5Iq57GrrS0okRdv7ZcfQHMADZQAXX0rNZwkOCK006g6crjc26kVYvW5UY6WCpWYjQALT3LjLD0jX35Th0it2g4fGf0OOG5I7PX6iVba9gN0l8j0000
 -->
 
 It essentially displays a substring of the channel description
 
-```bash
+~~~bash
 pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --shift-heading-level-by=-1
+
 pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
 
---pdfengine=xelatex if having alpha char
-```
+
+pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --listing && clear
+
+
+
+pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --highlight-style my_style.theme
+
+--highlight-style=STYLE
+~~~
 
 ### Gradescope Tagging
 
