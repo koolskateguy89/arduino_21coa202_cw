@@ -466,14 +466,14 @@ It makes sense to do as you won't be able to store the 64 most recent values any
 
 SCROLL and NAMES were implemented together as they go hand-in-hand, in the namespace `NAMES_SCROLL`.
 
-Initially, I stored the channel's description as a `String`, but in the end I chose to use a `const char*` as this allows me to allocate only the exact amount of memory needed to store the description.
+Initially, I stored the channel's description as a `String`, but in the end I chose to use a `const char*` as this allowed me to allocate the exact amount of memory needed to store the description.
 
 The channel description is printed to the display using `lcd.print` with padded spaces on the end to overwrite the previously displayed description:
 
 ![Displaying the channel description](doc/names/displayNames.png)
 
 At first, I copied the description to a separate buffer,
-with padded spaces to the end (to overwrite the previously displayed description) if the channel description was not long enough to take up all the space it should on the display, then that buffer would be printed to the LCD. Which can be seen below:
+with padded spaces to the end (to overwrite the previously displayed description), then that buffer would be printed to the LCD:
 
 ~~~ {.cpp .numberLines startFrom="741"}
 char buf[DESC_DISPLAY_LEN + 1];
@@ -488,7 +488,7 @@ if (dLen < DESC_DISPLAY_LEN) {
 lcd.print(buf);
 ~~~
 
-But I chose to use my current implementation as it does not involve creating a temporary buffer.
+But I chose to direcly access the string buffer as it does not involve creating a temporary buffer.
 
 ### Example
 
@@ -497,8 +497,6 @@ For example, after a `CAMain` message, the Arduino should look like:
 ![NAMES Arduino Display](doc/names/names_arduino.jpg)
 
 ## SCROLL {#SCROLL}
-
-*Write about this extension*
 
 *In documentation, highlight parts of FSM required for this particular requirement and the LoC and functions that carry this implementation*
 
