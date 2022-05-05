@@ -808,6 +808,10 @@ void loop() {
     break;
 
   case MAIN_LOOP: // basically AWAITING_PRESS & AWAITING_MESSAGE
+    handleSerialInput(&topChannel, hciState);
+
+    updateDisplay(topChannel, hciState);
+
     pressedButton = lcd.readButtons();
 
     if (pressedButton & BUTTON_SELECT) {
@@ -849,10 +853,6 @@ void loop() {
 
     if (pressedButton != 0)
       state = BUTTON_PRESSED;
-
-    handleSerialInput(&topChannel, hciState);
-
-    updateDisplay(topChannel, hciState);
     break;
 
   // select is currently being held, waiting to reach 1 second
