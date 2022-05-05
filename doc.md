@@ -5,12 +5,6 @@ author: _F120840_
 date: Semester 2
 ---
 
-## Table of Contents {.unnumbered}
-
-[\ref{fsms} FSMs](\ref{fsms)
-
-[Data structures](#data-structures)
-
 ## FSMs {#fsms}
 
 ![Main FSM\label{main-fsm}](doc/main_fsm.svg)
@@ -66,7 +60,7 @@ My code includes other FSMs in the extensions.
 
 **TODO: FSM after all extensions*
 
-## Data structures
+## Data structures {#ds}
 
 ### Types
 
@@ -121,7 +115,7 @@ Table: Static `Channel` functions
 When `UP` is pressed, `Channel#canGoUp` is called to check that there exists a channel before the one currently displayed on top, and if there is then `Channel#channelBefore` is called to get it and `loop()#topChannel` is updated.
 When `DOWN` is pressed, the same process occurs but using `Channel#canGoDown` and `Channel#channelAfter`.
 
-I chose to use a LL over an array of pointers as although it makes the logic more complicated, I felt it was a cleaner solution and it made getting the channel before\after a channel easier if there uncreated channels.
+I chose to use a LL over an array of pointers as although it makes the logic more complicated, I felt it was a cleaner solution and it made getting the channel before/after a channel easier if there uncreated channels.
 
 #### Struct `SerialInput`
 
@@ -172,9 +166,9 @@ Debug functions generally start with '`_`', and are commented with '`// debug`'.
 
 The program will only send debug messages if the `DEBUG` macro is defined as a non-zero number.
 
-Right after syncronisation, the program sends multiple debug messages about the channels that have been created using values read from the EEPROM.
+Right after syncronisation is complete, the program sends multiple debug messages about the channels that have been created using values read from the EEPROM.
 
-Whenever an erroneous message (not conforming to the protocol) is sent, a DEBUG message about it is sent just before the ERROR message.
+Whenever an erroneous message (not conforming to the protocol) is sent, a debug message about it is sent just before the error message.
 
 ## Reflection
 
@@ -530,7 +524,7 @@ pandoc doc.md --number-sections --output=output.pdf --template=coa202.latex --sh
 pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1
 
 
-pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1  && clear
+pandoc doc.md -N -o output.pdf --template=coa202.latex --shift-heading-level-by=-1 --toc && clear
 
 
 
