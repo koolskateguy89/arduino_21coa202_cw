@@ -595,6 +595,7 @@ namespace FREERAM {
 }
 
 /*
+ * called _EEPROM to avoid name conflict with EEPROM
  *
  * Each channel occupies 26 bytes in EEPROM:
  * 1 id
@@ -630,8 +631,7 @@ namespace _EEPROM {
       str[len] = '\0';
     }
 
-    // check that the channel written was written by me by checking
-    // that my student ID is written there
+    // verify that the channel written was by me by checking my student ID is written there
     bool channelHasValidStudentId(char id) {
       char readStudentId[8];
       readStr(studentIdOffset(addressForId(id)), readStudentId, 7);
