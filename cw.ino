@@ -837,7 +837,7 @@ void loop() {
       debug_println(F("DEBUG: LEFT pressed"));
       hciState = (hciState == LEFT_MIN) ? NORMAL : LEFT_MIN;
       _printHciState(hciState);
-      // 'reset' topChannel (get first channel that meets hcistate)
+      // 'reset' topChannel (get first channel that matches hcistate)
       topChannel = Channel::firstChannel(hciState);
       pressedButton = BUTTON_LEFT;
 
