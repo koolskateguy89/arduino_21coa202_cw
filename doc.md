@@ -128,7 +128,7 @@ But I felt that this did not make sense to be a state as the program flow for th
 
 ## UDCHARS
 
-The namespace `UDCHARS` contains all the code relating to the UDCHARS extension.
+The namespace `UDCHARS` contains the code relating to the UDCHARS extension.
 
 The following macros were defined, for use when creating and displaying the custom characters:
 
@@ -143,9 +143,9 @@ The only change to the FSM was that in the `INITIALISATION` state, the custom ch
 http://www.plantuml.com/plantuml/uml/BSknQWGX4CRntgUO1pWmzLQtkHGHmYLaDzqsehCew2Wp8o5l7uJj_XzylxkePnsrc9GZ0jQkVn1H0kUkkP4nxkbsjtwuRTtTvtC1GGLj_P4y4PORNB4i2Nsy1cW36gLqvOCECubWmQ1VZ29xhdY3FXFZwr1jDC7Bl5eRySo448Peg-2Pso-4vDa7HHOu6yFFs-Dz_TwiDNUaE6hv1m00
 -->
 
-In my code, this change was realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 782):
+In my code, this change was realised by calling `UDCHARS::createChars()` in the `INITIALISATION` state (line 781):
 
-![UDCHARS FSM Code Change](doc/udchars/udchars_createChars.png)
+![UDCHARS FSM Code Change](doc/udchars/initialisation_createchars.png)
 
 ### Defining
 
@@ -182,7 +182,7 @@ As there are no channels before ("above") `A`, the up arrow is not displayed, a 
 
 ## FREERAM
 
-The namespace `FREERAM` contains all the code relating to the FREERAM extension.
+The namespace `FREERAM` contains the code relating to the FREERAM extension.
 
 The function `FREERAM::<unnamed>::freeMemory()` returns the number of bytes currently available in the Arduino's SRAM.
 
@@ -213,11 +213,16 @@ HCI is implemented using a finite state machine with the states:
 http://www.plantuml.com/plantuml/uml/bOzDImD138Rlyojo5le7F4XxyAFGLYWU11KPTe8RoAJ39AFkltSPTJyK5deBUH-Uv5sh-Mmbicif861Cra50RJ8bevCuTxW_xZUxImYaYNq7dXcQreiWgzjTtpoyxhU7CJu9TqCE7sGja2aq9MSKWsTvzrmG65N1UgocaOHYYUwulRthVPl7itrl6RrXdYZzPrMwfuiNMAskuBl7Jvsw6Pwl4wICgXZ69nQOt_N4_8UO7XfhrV6_PfaQWjcrERD62INo5m00
 -->
 
+This base of the HCI FSM is realised by the enum `HciState` and the function `Channel#meetsHciRequirement(HciState)`.
+
 
 
 ## EEPROM
 
 *In documentation, indicate how lay out use of EEPROM, which LoC and functions I use to store information*
+
+The namespace `_EEPROM` contains the code relating to the FREERAM extension.
+
 
 Each channel occupies 26 bytes in the EEPROM:
 
